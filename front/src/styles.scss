@@ -1,0 +1,66 @@
+//Imports
+@import "primeng/resources/primeng.css";
+
+//  Variaveis globais do projeto-TG
+//  por padrão Light Mode (só trocar depois)
+
+$colors-light:(
+    backgound-alpha: #ffffff,
+
+    text-alpha: #333333,
+);
+
+$colors-dark:(
+    backgound-alpha: #111111,
+
+    text-alpha: #ffffff,
+);
+
+:root {
+    @each $name, $color in $colors-light {
+        --color-#{$name}: #{$color};
+    }
+    --theme: 'light';
+};
+
+@media (prefers-color-scheme : dark) {
+    :root {
+        @each $name, $color in $colors-dark {
+            --color-#{$name}: #{$color};
+        }
+        --theme: 'dark';
+    }
+};
+
+@function getColor($color-name) {
+    @return var(--color-#{$color-name})
+};
+
+* {
+    margin: 0;
+    padding: 0;
+}
+
+
+// Estilização
+body {
+    transition: 0.5s;
+    background-color: getColor(backgound-alpha);
+    color: getColor(text-alpha);
+    padding: 0;
+    margin: 0;
+}
+
+p {
+    color: getColor(text-alpha);
+    font-family: Rawline;
+    font-size: 14px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: normal;
+}
+
+hr {
+    border-color: #959595;
+}
+
