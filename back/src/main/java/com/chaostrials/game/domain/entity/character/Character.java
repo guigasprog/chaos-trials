@@ -19,6 +19,10 @@ public class Character {
 
     private String name;
 
+    private Long level;
+
+    private Double xp;
+
     private Integer classes;
 
     private LocalDateTime lastContact;
