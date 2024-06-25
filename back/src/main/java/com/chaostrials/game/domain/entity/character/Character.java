@@ -1,10 +1,12 @@
 package com.chaostrials.game.domain.entity.character;
 
+import com.chaostrials.game.domain.entity.account.Account;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -23,16 +25,32 @@ public class Character {
 
     private Double xp;
 
+    @Column(name = "class")
     private Integer classes;
 
+    @Column(name = "last_contact")
     private LocalDateTime lastContact;
 
-    private UUID uuidAccount;
+    private Integer gold;
 
-    private UUID uuidAttribute;
+    @ManyToOne
+    @JoinColumn(name = "uuid_account")
+    private Account account;
 
-    private UUID uuidStats;
+    @OneToOne
+    @JoinColumn(name = "uuid_attribute")
+    private Attribute attribute;
 
-    private UUID uuidAbility;
+    @OneToOne
+    @JoinColumn(name = "uuid_stats")
+    private Stats stats;
+
+    @ManyToMany
+    @JoinTable(
+            name = "character_ability",
+            joinColumns = @JoinColumn(name = "uuid_character"),
+            inverseJoinColumns = @JoinColumn(name = "uuid_ability")
+    )
+    private List<Ability> abilities;
 
 }
