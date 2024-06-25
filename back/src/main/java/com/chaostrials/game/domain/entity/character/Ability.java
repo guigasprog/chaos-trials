@@ -20,6 +20,10 @@ public class Ability {
 
     private String effect;
 
+    @Column(name = "permitted_level")
     private Long permittedLevel;
+
+    @Column(name = "class")
+    private Integer classes;
 
 }
