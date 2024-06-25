@@ -23,8 +23,8 @@ public class AccountController {
     }
 
     @GetMapping
-    public ResponseEntity<Account> login(LoginForm loginForm) {
-        return ResponseEntity.ok().body(this.loginAccount.loginAccount(loginForm));
+    public ResponseEntity<String> login(LoginForm loginForm) {
+        return ResponseEntity.ok().body("oi world");
     }
 
 }
