@@ -22,4 +22,6 @@ public class Account {
 
     private String password;
 
+    private Boolean ban;
+
 }
