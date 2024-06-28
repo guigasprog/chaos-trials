@@ -22,6 +22,7 @@ public class Account {
 
     private String password;
 
+    @Column(name = "banned")
     private Boolean ban;
 
 }
