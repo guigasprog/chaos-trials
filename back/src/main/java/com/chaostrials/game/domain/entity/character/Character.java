@@ -12,7 +12,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @Entity
-@Table(schema = "private", name = "character")
+@Table(schema = "private", name = "characters")
 public class Character {
 
     @Id
@@ -45,8 +45,13 @@ public class Character {
     @JoinColumn(name = "uuid_stats")
     private Stats stats;
 
+    @OneToOne
+    @JoinColumn(name = "uuid_inventory")
+    private Stats inventory;
+
     @ManyToMany
     @JoinTable(
+            schema = "private",
             name = "character_ability",
             joinColumns = @JoinColumn(name = "uuid_character"),
             inverseJoinColumns = @JoinColumn(name = "uuid_ability")
