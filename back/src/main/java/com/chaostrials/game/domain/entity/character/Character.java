@@ -45,10 +45,6 @@ public class Character {
     @JoinColumn(name = "uuid_stats")
     private Stats stats;
 
-    @OneToOne
-    @JoinColumn(name = "uuid_inventory")
-    private Stats inventory;
-
     @ManyToMany
     @JoinTable(
             schema = "private",
