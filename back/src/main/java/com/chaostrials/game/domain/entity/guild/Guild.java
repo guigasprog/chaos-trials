@@ -26,6 +26,10 @@ public class Guild {
 
     private Integer points;
 
-    private Boolean privado;
+    private Integer power;
+
+    private String requirements;
+
+    private Boolean particular;
 
 }
