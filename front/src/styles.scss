@@ -1,5 +1,6 @@
 //Imports
 @import "primeng/resources/primeng.css";
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=VT323&display=swap');
 
 //  Variaveis globais do projeto-TG
 //  por padrão Light Mode (só trocar depois)
@@ -53,14 +54,97 @@ body {
 
 p {
     color: getColor(text-alpha);
-    font-family: Rawline;
     font-size: 14px;
     font-style: normal;
     font-weight: 400;
     line-height: normal;
 }
 
+p, h1, h2, h3, h4, h5, h6, span {
+  font-family: "Inter", sans-serif;
+  font-weight: 500;
+}
+
 hr {
     border-color: #959595;
 }
 
+.full-container {
+  width: 100vw;
+  height: 100vh;
+}
+
+.mid-container {
+  width: 95vw;
+  height: 100vh;
+  margin: auto;
+}
+
+.container {
+  width: 90vw;
+  height: 100vh;
+  margin: auto;
+}
+
+.card {
+  z-index: 3000;
+  border-radius: 30px;
+  overflow: hidden;
+}
+
+.card-toasty {
+  width: 250px;
+  height: 100px;
+  border-radius: 20px;
+  .content {
+    width: 235px;
+    height: 100%;
+    margin-left: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: rgb(0, 0, 0);
+    background-color: rgb(255, 255, 255);
+  }
+}
+
+.card-3x4 {
+  width: 300px;
+  height: 400px;
+}
+
+.card-4x3 {
+  width: 400px;
+  height: 300px;
+}
+
+.card-4x4 {
+  width: 400px;
+  height: 400px;
+}
+
+.card-info {
+  background-color: rgb(142, 209, 253);
+  color: rgb(0, 0, 0)
+}
+
+.card-success {
+  background-color: rgb(95, 221, 95);
+  color: rgb(255, 255, 255);
+}
+
+.card-warning {
+  background-color: rgb(214, 205, 74);
+  color: rgb(0, 0, 0);
+}
+
+.card-danger {
+  background-color: rgb(233, 115, 115);
+  color: rgb(0, 0, 0);
+}
+
+input {
+  width: 280px;
+  height: 50px;
+  background-color: aqua;
+}
