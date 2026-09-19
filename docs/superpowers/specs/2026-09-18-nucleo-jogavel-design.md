@@ -315,8 +315,23 @@ Isso fecha como jogo que abre e se joga.
 
 - **Balanceamento é o risco dominante.** Progressão infinita é fácil de
   escrever e difícil de tornar interessante. Mitigação: constantes num módulo
-  só, e um script que simula 100 camadas e reporta a curva antes de qualquer
-  ajuste ir para produção.
+  só, e `npm run simular` reportando a curva antes de qualquer ajuste ir para
+  produção. Já se pagou: a primeira execução encontrou dois defeitos
+  estruturais (inimigo exponencial contra jogador linear; e `vigor` servindo ao
+  Tank como ofensiva e defesa ao mesmo tempo), e ambos viraram teste de
+  regressão.
+
+- **EM ABERTO — a vantagem de prestígio não tem para onde ir.** O jogador ganha
+  1,6 por camada e o inimigo 1,45; a diferença composta cresce sem limite, e a
+  partir da camada 35 ele está 100x acima do conteúdo. Esse mesmo mecanismo é o
+  que faz a progressão nunca parar, então não dá para removê-lo sem tornar o
+  prestígio decorativo.
+
+  Falta a outra metade: algo que **consuma** a vantagem acumulada. No gênero,
+  isso costuma ser o teto de nível subindo a cada camada — o multiplicador leva
+  mais longe em vez de tornar o mesmo trecho trivial. Hoje o teto é fixo em
+  100. É decisão de produto e precisa ser tomada antes do motor de combate,
+  porque define o que "uma camada" contém.
 - **Revive só premium** concentra a monetização num ponto de frustração. É
   decisão tomada; o risco é reputacional e de conversão, não técnico. Se algum
   dia for para app da Apple ou Google, progresso bloqueado atrás de pagamento

@@ -42,6 +42,26 @@ export const ATRIBUTO_DO_RAMO: Readonly<Record<Ramo, NomeAtributo>> = {
   5: "vigor",
 };
 
+/**
+ * Com que atributo cada ramo causa dano.
+ *
+ * Igual ao atributo do ramo em quatro deles, e diferente no Tank de propósito:
+ * `vigor` já alimenta vida máxima E redução de dano, e usá-lo também como
+ * ofensiva dava ao Tank triplo aproveitamento do mesmo ponto. A simulação
+ * mediu: ele ficava 4,6x acima dos outros quatro.
+ *
+ * Um tanque que bate mais forte e ainda sobrevive mais é estritamente
+ * dominante, e classe estritamente dominante não é escolha — é resposta certa.
+ * O Tank bate com força, como qualquer um; o que o distingue é aguentar.
+ */
+export const ATRIBUTO_OFENSIVO_DO_RAMO: Readonly<Record<Ramo, NomeAtributo>> = {
+  1: "intelecto",
+  2: "presenca",
+  3: "destreza",
+  4: "forca",
+  5: "forca",
+};
+
 const VAZIO: Atributos = {
   intelecto: 0,
   presenca: 0,

@@ -48,9 +48,42 @@ export const NIVEL_DA_SUBCLASSE: Readonly<Record<number, number>> = {
 
 // ── Inimigos ─────────────────────────────────────────────────────────────
 
-/** Quanto o inimigo cresce por nível do jogador. Abaixo do crescimento do
- *  jogador de propósito: o avanço tem de ser sentido. */
-export const CRESCIMENTO_INIMIGO = 1.15;
+/**
+ * A classe contra a qual o inimigo é calibrado. Melee, por ser a mediana dos
+ * cinco ramos em poder de referência.
+ */
+export const CLASSE_DE_REFERENCIA = 4;
+
+/**
+ * Quanto o jogador abre de vantagem ao longo de uma vida: `nivel ^ 0,3`, o que
+ * dá cerca de 4x entre o nível 1 e o 100.
+ *
+ * O inimigo é definido **em relação ao poder de um personagem de referência
+ * naquele nível**, e não por uma lei de potência própria. Isso importa: duas
+ * tentativas anteriores usaram fórmula independente e as duas quebraram, cada
+ * uma numa ponta. `1,15 ^ nivel` era exponencial contra o crescimento linear
+ * dos atributos, e no nível 100 o jogador ficava 970x atrás. `nivel ^ 1,82`
+ * acertava o fim da vida e subia rápido demais no começo — o nível 2 já ficava
+ * intransponível.
+ *
+ * Amarrado à curva real, o inimigo acompanha qualquer mudança de atributo sem
+ * precisar de recalibragem, e a constante passa a significar algo que dá para
+ * decidir: quanto a pessoa fica mais forte do começo ao fim de uma vida.
+ */
+export const DERIVA_DA_VIDA = 0.3;
+
+/**
+ * Crescimento do inimigo POR CAMADA de prestígio.
+ *
+ * Abaixo do ganho do jogador (1,6) de propósito: a razão entre os dois
+ * (1,6 / 1,45 ≈ 1,10) é o motor da progressão infinita. Cada renascimento
+ * deixa a pessoa ~10% mais adiantada do que na camada anterior, então ela
+ * chega mais longe a cada vez em vez de repetir a mesma parede.
+ *
+ * Igualá-lo a 1,6 tornaria o prestígio decorativo: ganho e dificuldade se
+ * cancelariam e renascer não levaria a lugar nenhum.
+ */
+export const CRESCIMENTO_INIMIGO_POR_CAMADA = 1.45;
 
 // ── Offline ──────────────────────────────────────────────────────────────
 

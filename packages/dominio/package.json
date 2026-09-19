@@ -12,6 +12,7 @@
   },
   "scripts": {
     "teste": "node ../../scripts/testar.mjs",
-    "tipos": "tsc --noEmit"
+    "tipos": "tsc --noEmit",
+    "simular": "node --import tsx scripts/simular.ts"
   }
 }
