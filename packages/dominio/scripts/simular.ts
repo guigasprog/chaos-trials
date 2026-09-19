@@ -17,6 +17,13 @@ import {
   vidaMaxima,
 } from "../src/atributos.ts";
 import { RAIZES, ramoDe } from "../src/classe.ts";
+import {
+  criarCombatente,
+  iniciarBatalha,
+  resolverBatalha,
+} from "../src/batalha.ts";
+import { habilidadesDe } from "../src/habilidades.ts";
+import { sementeDe } from "../src/aleatorio.ts";
 import { grande, potencia, produto, texto } from "../src/grande.ts";
 import {
   AVANCO_DA_PAREDE_POR_CAMADA,
@@ -220,6 +227,86 @@ if (pior < 0.9) {
   Rampa contínua nos cinco ramos, do nível 1 até a parede.
   Pior razão antes da parede: ${pior.toFixed(2)}.
   A parede sempre existe, e sempre está mais longe que na vida anterior.`);
+}
+
+// ── A verificação que só o motor de combate torna possível ───────────────
+
+titulo("TAXA DE VITÓRIA REAL — 200 batalhas simuladas por ponto");
+
+/**
+ * Até aqui o relatório comparou uma RAZÃO de poder, que é estimativa. Isto
+ * resolve as batalhas de verdade, turno a turno: é a única forma de saber se a
+ * fórmula de equilíbrio descreve o jogo ou só a si mesma.
+ */
+function taxaDeVitoria(
+  indiceClasse: number,
+  nivel: number,
+  camada: number,
+  amostras = 200,
+): number {
+  const ramo = ramoDe(indiceClasse);
+  let vitorias = 0;
+
+  for (let i = 0; i < amostras; i++) {
+    const heroi = criarCombatente({
+      id: "heroi",
+      nome: "Herói",
+      lado: "jogador",
+      ramo,
+      atributos: atributosDe(indiceClasse, nivel),
+      habilidades: habilidadesDe(ramo, nivel).map((h) => h.id),
+    });
+    // O inimigo é o personagem de referência no mesmo nível, temperado pelo
+    // fator que a curva de equilíbrio aplica — assim a simulação mede o mesmo
+    // confronto que a fórmula descreve.
+    const forca = 1 / equilibrio(indiceClasse, nivel, camada);
+    const oponente = criarCombatente({
+      id: "vilao",
+      nome: "Vilão",
+      lado: "inimigo",
+      ramo: 4,
+      atributos: escalarAtributos(atributosDe(4, nivel), forca),
+      habilidades: ["golpe", "investida", "perfurar"].filter(
+        (h) => habilidadesDe(4, nivel).some((x) => x.id === h),
+      ),
+    });
+
+    const { batalha } = resolverBatalha(
+      iniciarBatalha([heroi, oponente], sementeDe(`${indiceClasse}:${nivel}:${camada}:${i}`)),
+    );
+    if (batalha.vencedor === "jogador") vitorias++;
+  }
+
+  return vitorias / amostras;
+}
+
+function escalarAtributos(a: ReturnType<typeof atributosDe>, fator: number) {
+  const f = Math.max(0.2, fator ** 0.5);
+  return {
+    intelecto: Math.max(1, Math.round(a.intelecto * f)),
+    presenca: Math.max(1, Math.round(a.presenca * f)),
+    destreza: Math.max(1, Math.round(a.destreza * f)),
+    forca: Math.max(1, Math.round(a.forca * f)),
+    vigor: Math.max(1, Math.round(a.vigor * f)),
+  };
+}
+
+console.log("  nível".padEnd(10) + "razão prevista".padEnd(18) + "vitórias medidas");
+linha();
+for (const nivel of [10, 50, 100]) {
+  const r = equilibrio(4, nivel, 0);
+  const taxa = taxaDeVitoria(4, nivel, 0);
+  console.log(
+    `  ${nivel}`.padEnd(10) +
+      r.toFixed(2).padEnd(18) +
+      `${(taxa * 100).toFixed(0)}%`,
+  );
+}
+console.log();
+console.log("  por classe, no nível 50:");
+for (const c of RAIZES) {
+  const taxa = taxaDeVitoria(c.indice, 50, 0);
+  console.log(`    ${c.nome.padEnd(10)} ${(taxa * 100).toFixed(0)}%`);
 }
 
 titulo("OUTROS NÚMEROS");

@@ -49,11 +49,16 @@ export const AVANCO_DA_PAREDE_POR_CAMADA = Math.sqrt(CRESCIMENTO_POR_CAMADA);
  * nenhuma: medido, o jogador tinha 10.000x de vantagem no nível 1 e só
  * encontrava oposição real a partir do nível 50 — metade da vida era passeio.
  *
- * Deslocando em 100, a vida começa com ~4x de folga (confortável, não
- * trivial) e fecha em 1x na parede. A rampa fica contínua do primeiro nível ao
- * último.
+ * O valor veio de duas medições, não de intuição. Com deslocamento 0 a vida
+ * começava com 10.000x de vantagem. Com 100, começava com 3,92x — e aí o motor
+ * de combate, resolvendo batalhas de verdade, mostrou que razão 1,78 já dá 99%
+ * de vitória: a curva razão→vitória é muito mais íngreme do que parecia, e a
+ * vida inteira virava passeio até os últimos níveis.
+ *
+ * Com 400, a vida vai de ~1,55x até 1,00x na parede. A faixa é estreita porque
+ * é nela que o combate de fato se decide.
  */
-export const DESLOCAMENTO_DO_INIMIGO = 100;
+export const DESLOCAMENTO_DO_INIMIGO = 400;
 
 // ── Nível ────────────────────────────────────────────────────────────────
 

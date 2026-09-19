@@ -90,12 +90,14 @@ describe("prestígio", () => {
  */
 describe("a parede, e o caminho até ela", () => {
   it("a vida começa confortável, sem ser passeio", () => {
-    // Sem o deslocamento da curva do inimigo, o nível 1 dava 10.000x de
-    // vantagem e a resistência real só começava lá pelo nível 50.
+    // A faixa é estreita, e por um motivo medido: resolvendo batalhas de
+    // verdade, razão 1,78 já dava 99% de vitória. A curva razão→vitória é bem
+    // mais íngreme do que a intuição sugere, então a vida inteira cabe entre
+    // ~1,5 e 1,0 — fora disso, ou é passeio ou é parede.
     for (const classe of RAIZES) {
       const r = equilibrio(classe.indice, 1, 0);
-      assert.ok(r > 1.5, `${classe.nome} começa sufocado: ${r.toFixed(2)}`);
-      assert.ok(r < 8, `${classe.nome} começa invencível: ${r.toFixed(2)}`);
+      assert.ok(r > 1.15, `${classe.nome} começa sufocado: ${r.toFixed(2)}`);
+      assert.ok(r < 2.5, `${classe.nome} começa invencível: ${r.toFixed(2)}`);
     }
   });
 

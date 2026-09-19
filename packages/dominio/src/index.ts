@@ -3,3 +3,7 @@ export * from "./classe.ts";
 export * from "./atributos.ts";
 export * from "./progressao.ts";
 export * as balanceamento from "./balanceamento.ts";
+export * from "./aleatorio.ts";
+export * from "./efeitos.ts";
+export * from "./habilidades.ts";
+export * from "./batalha.ts";
