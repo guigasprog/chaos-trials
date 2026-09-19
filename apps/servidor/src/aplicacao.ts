@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
 import {
   classePorIndice,
   criarPersonagem,
@@ -49,6 +50,11 @@ export interface Opcoes {
   /** Injetável para o teste não depender do relógio da máquina. */
   agora?: () => number;
   log?: boolean;
+  /**
+   * De onde o navegador pode chamar. Vazio libera tudo, que é o certo em
+   * desenvolvimento e errado em produção.
+   */
+  origens?: readonly string[];
 }
 
 /** O personagem como o cliente o vê: com o derivado já calculado. */
@@ -90,6 +96,21 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
   const { armazenamento } = opcoes;
   const agora = opcoes.agora ?? (() => Date.now());
   const batalhas = new Batalhas();
+
+  /*
+   * CORS.
+   *
+   * O cliente roda numa porta e a API em outra, então toda chamada do
+   * navegador é de origem cruzada — e sem estes cabeçalhos o navegador
+   * simplesmente recusa, sem nunca chegar ao servidor.
+   *
+   * Passou despercebido por 20 testes de API porque `app.inject` e `curl` não
+   * aplicam a política de origem: só o navegador aplica. Apareceu no primeiro
+   * clique de verdade.
+   */
+  void app.register(cors, {
+    origin: opcoes.origens && opcoes.origens.length > 0 ? [...opcoes.origens] : true,
+  });
 
   /**
    * Carrega o personagem e aplica o que aconteceu enquanto ele esteve fora.

@@ -10,7 +10,8 @@
     "teste": "npm run teste --workspaces --if-present",
     "tipos": "npm run tipos --workspaces --if-present",
     "simular": "npm run simular --workspace @chaos/dominio",
-    "servidor": "npm run inicio --workspace @chaos/servidor"
+    "servidor": "npm run inicio --workspace @chaos/servidor",
+    "jogo": "npm run dev --workspace @chaos/jogo"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

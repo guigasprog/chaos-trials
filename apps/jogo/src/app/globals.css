@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  --color-pedra: #0a0810;
+  --color-pedra-alta: #14101f;
+  --color-borda: #2a2340;
+  --color-tinta: #ece6f5;
+  --color-tinta-fraca: #9a91b0;
+  --color-ouro: #d9a441;
+  --color-ouro-claro: #f0cb84;
+  --color-sangue: #c8372b;
+  --color-verdete: #6a8a70;
+
+  --font-titulo: "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+  --font-corpo: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background: var(--color-pedra);
+  color: var(--color-tinta);
+  font-family: var(--font-corpo);
+}
+
+/* Título com o peso de inscrição em pedra, que é o tom do Expedition 33. */
+.titulo {
+  font-family: var(--font-titulo);
+  font-weight: 300;
+  letter-spacing: 0.02em;
+}
+
+.rotulo {
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-tinta-fraca);
+}
+
+/* Painel com um fio de luz no topo — o vidro pegando a luz da nave. */
+.painel {
+  background: linear-gradient(180deg, rgba(42, 35, 64, 0.35), rgba(20, 16, 31, 0.9));
+  border: 1px solid var(--color-borda);
+  position: relative;
+}
+.painel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(240, 203, 132, 0.5), transparent);
+}
+
+.botao {
+  border: 1px solid var(--color-borda);
+  background: rgba(42, 35, 64, 0.35);
+  padding: 0.6rem 1.1rem;
+  transition: border-color 160ms, background 160ms, color 160ms;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+}
+.botao:hover:not(:disabled) {
+  border-color: var(--color-ouro);
+  color: var(--color-ouro-claro);
+  background: rgba(217, 164, 65, 0.1);
+}
+.botao:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+.botao-perigo:hover:not(:disabled) {
+  border-color: var(--color-sangue);
+  color: #f0938a;
+  background: rgba(200, 55, 43, 0.12);
+}
+
+.barra {
+  height: 3px;
+  background: rgba(42, 35, 64, 0.8);
+  overflow: hidden;
+}
+.barra > div {
+  height: 100%;
+  transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes surgir {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.surge { animation: surgir 460ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

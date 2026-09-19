@@ -408,6 +408,39 @@ describe("renascimento", () => {
   });
 });
 
+describe("origem cruzada", () => {
+  it("responde com os cabeçalhos que o navegador exige", async () => {
+    // Faltou até o primeiro clique de verdade: `app.inject` e `curl` não
+    // aplicam política de origem, só o navegador aplica. Vinte testes de API
+    // passavam e a tela não conseguia falar com o servidor.
+    const r = await app.inject({
+      method: "OPTIONS",
+      url: "/classes",
+      headers: {
+        origin: "http://localhost:3000",
+        "access-control-request-method": "GET",
+      },
+    });
+    assert.ok(
+      r.headers["access-control-allow-origin"],
+      "sem access-control-allow-origin o navegador recusa antes de chamar",
+    );
+  });
+
+  it("libera também os pedidos com corpo JSON", async () => {
+    const r = await app.inject({
+      method: "OPTIONS",
+      url: "/personagens",
+      headers: {
+        origin: "http://localhost:3000",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+    assert.ok(r.headers["access-control-allow-headers"]);
+  });
+});
+
 describe("saúde", () => {
   it("responde", async () => {
     const r = await app.inject({ method: "GET", url: "/saude" });

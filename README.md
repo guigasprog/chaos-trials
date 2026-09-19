@@ -13,16 +13,26 @@ npm install
 npm run teste      # 141 testes: domínio e API
 npm run tipos      # conferência de tipos
 npm run simular    # relatório de balanceamento
-npm run servidor   # sobe o jogo em http://localhost:3333
+npm run servidor   # a API, em http://localhost:3333
+npm run jogo       # a tela, em http://localhost:3000
 ```
 
-O **jogo roda**: dá para criar personagem, lutar turno a turno, subir de
-nível, escolher subclasse, enfrentar julgamentos, morrer e ser revivido —
-tudo pela API. Ainda **não há tela nem conta**: o cliente é o próximo passo, e
-autenticação é o sub-projeto 6. Hoje o id do personagem é a credencial, o que
-serve para jogar localmente e não para expor.
+Com os dois no ar, abra **http://localhost:3000** e jogue.
 
-Um exemplo de partida inteira, por HTTP:
+O **jogo roda, com tela**: escolher uma das cinco raízes, criar personagem,
+lutar turno a turno clicando nas habilidades, subir de nível, escolher
+subclasse, enfrentar julgamentos, morrer e ser revivido.
+
+Ainda **não há conta**: autenticação é o sub-projeto 6. Hoje o id do
+personagem fica no navegador e serve de credencial, o que basta para jogar
+localmente e não para expor.
+
+A arte das classes é gerada por procedimento, em SVG: vitral é chumbo e vidro
+colorido, que é exatamente o que SVG expressa. As 45 classes saem do próprio
+índice — paleta pelo ramo raiz, complexidade pela profundidade —, então cada
+uma é única sem 45 ilustrações à mão.
+
+Também dá para jogar sem tela nenhuma, por HTTP:
 
 ```bash
 npm run servidor &
