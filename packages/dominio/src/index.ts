@@ -7,3 +7,4 @@ export * from "./aleatorio.ts";
 export * from "./efeitos.ts";
 export * from "./habilidades.ts";
 export * from "./batalha.ts";
+export * from "./personagem.ts";
