@@ -9,7 +9,8 @@
   "scripts": {
     "teste": "npm run teste --workspaces --if-present",
     "tipos": "npm run tipos --workspaces --if-present",
-    "simular": "npm run simular --workspace @chaos/dominio"
+    "simular": "npm run simular --workspace @chaos/dominio",
+    "servidor": "npm run inicio --workspace @chaos/servidor"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
