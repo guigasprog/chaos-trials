@@ -259,16 +259,17 @@ describe("progressão offline", () => {
     assert.equal(r.personagem.estado, "tumulo");
   });
 
-  it("morrer offline manda para o túmulo e interrompe ali", () => {
-    // Muito ALÉM da parede da camada, que é onde a derrota é certa. Nível
-    // baixo em camada alta não serve: no modelo atual a camada multiplica só
-    // o jogador, então isso faria dele um deus, não uma vítima.
+  it("derrota offline é recuo, nunca morte", () => {
+    // Regra deliberada: só o julgamento mata, porque só nele a pessoa escolheu
+    // arriscar. Offline não há julgamento — matar quem estava ausente seria
+    // punir a ausência por uma aposta que ninguém fez.
     const condenado = { ...noNivel(1000), camada: 0 };
     const r = progredirOffline(condenado, AGORA + 8 * HORA);
-    assert.ok(r.morreu, "devia ter morrido");
-    assert.equal(r.personagem.estado, "tumulo");
-    // Parou na derrota em vez de continuar morrendo enquanto ninguém olhava.
-    assert.ok(r.batalhas < 900, `seguiu por ${r.batalhas} batalhas depois de morrer`);
+    assert.equal(r.morreu, false);
+    assert.equal(r.personagem.estado, "vivo");
+    assert.ok(r.personagem.vida > 0, "recuou com vida");
+    // E para na derrota, em vez de seguir perdendo enquanto ninguém olha.
+    assert.ok(r.batalhas < 900, `seguiu por ${r.batalhas} batalhas`);
   });
 
   it("o relógio avança mesmo quando nada rende", () => {

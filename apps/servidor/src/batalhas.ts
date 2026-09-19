@@ -10,6 +10,7 @@ import {
   iniciarBatalha,
   type Personagem,
   ramoDe,
+  PREMIO_DO_JULGAMENTO,
   recompensaDe,
   sementeDe,
 } from "@chaos/dominio";
@@ -27,10 +28,22 @@ import {
  * batalha termina.
  */
 
+/**
+ * Comum ou julgamento.
+ *
+ * Perder uma comum é recuar. Perder um julgamento é morrer de verdade, e é a
+ * única forma de morrer no jogo — porque é a única em que a pessoa escolheu
+ * arriscar. Em troca, o julgamento paga muito mais.
+ */
+export type TipoDeBatalha = "comum" | "julgamento";
+
 export interface Sessao {
   readonly id: string;
   readonly personagemId: string;
+  readonly tipo: TipoDeBatalha;
   readonly batalha: Batalha;
+  /** O que o inimigo fez antes da primeira vez do herói, quando ele é mais ágil. */
+  readonly aberturaDoInimigo: readonly Evento[];
   /** Nível em que a batalha começou — a recompensa não muda se subir no meio. */
   readonly nivelInicial: number;
   readonly criadaEm: number;
@@ -44,7 +57,7 @@ export class Batalhas {
   private contador = 0;
 
   /** Monta o encontro apropriado para o personagem. */
-  iniciar(p: Personagem, agora: number): Sessao {
+  iniciar(p: Personagem, agora: number, tipo: TipoDeBatalha = "comum"): Sessao {
     const ramo = ramoDe(p.classe);
 
     const heroi = criarCombatente({
@@ -62,7 +75,7 @@ export class Batalhas {
       nome: "Sombra do Caos",
       lado: "inimigo",
       ramo: 4,
-      atributos: oponenteDe(p),
+      atributos: oponenteDe(p, tipo),
       habilidades: habilidadesDe(4, p.nivel)
         .map((h) => h.id)
         // O inimigo não se cura: uma luta por turnos contra algo que se cura
@@ -72,13 +85,29 @@ export class Batalhas {
 
     this.contador += 1;
     const id = `b${this.contador}`;
+
+    /*
+     * Adianta até a vez do herói.
+     *
+     * A iniciativa decide quem começa, e um inimigo mais ágil começa. Sem
+     * isto, a batalha nasceria na vez dele e toda tentativa de agir receberia
+     * "não é a sua vez" — para sempre, porque o servidor só joga pelos outros
+     * DEPOIS de uma ação do jogador. Achado jogando: um personagem muito
+     * acima do nível encontra inimigos mais rápidos, e a luta simplesmente
+     * travava.
+     */
+    const inicial = iniciarBatalha(
+      [heroi, vilao],
+      sementeDe(`${p.id}:${p.camada}:${p.nivel}:${tipo}:${agora}`),
+    );
+    const { batalha, eventos } = adiantarAteOHeroi(inicial);
+
     const sessao: Sessao = {
       id,
       personagemId: p.id,
-      batalha: iniciarBatalha(
-        [heroi, vilao],
-        sementeDe(`${p.id}:${p.camada}:${p.nivel}:${agora}`),
-      ),
+      tipo,
+      batalha,
+      aberturaDoInimigo: eventos,
       nivelInicial: p.nivel,
       criadaEm: agora,
     };
@@ -116,22 +145,13 @@ export class Batalhas {
       throw new ErroDeBatalha(400, `habilidade indisponível: ${habilidade}`);
     }
 
-    let batalha = executarTurno(sessao.batalha, habilidade);
-    const eventos: Evento[] = [...batalha.eventos];
+    const doHeroi = executarTurno(sessao.batalha, habilidade);
+    // Enquanto não for a vez do herói, o servidor joga pelos outros: o cliente
+    // pede uma ação e espera ver a resposta do inimigo na mesma resposta.
+    const depois = adiantarAteOHeroi(doHeroi);
+    const eventos: Evento[] = [...doHeroi.eventos, ...depois.eventos];
 
-    // Enquanto não for a vez do herói, o servidor joga pelos outros.
-    let guarda = 0;
-    while (
-      !batalha.vencedor &&
-      batalha.ordem[batalha.vez] !== "heroi" &&
-      guarda < 50
-    ) {
-      batalha = executarTurno(batalha);
-      eventos.push(...batalha.eventos);
-      guarda += 1;
-    }
-
-    const atualizada: Sessao = { ...sessao, batalha };
+    const atualizada: Sessao = { ...sessao, batalha: depois.batalha };
     this.sessoes.set(sessaoId, atualizada);
     return { sessao: atualizada, eventos };
   }
@@ -152,6 +172,33 @@ export class Batalhas {
   }
 }
 
+/**
+ * Roda os turnos de quem não é o herói até chegar a vez dele.
+ *
+ * Usado na abertura e depois de cada ação. O teto existe porque um efeito que
+ * impedisse todo mundo de agir poderia, em teoria, girar sem fim.
+ */
+function adiantarAteOHeroi(inicio: Batalha): {
+  batalha: Batalha;
+  eventos: Evento[];
+} {
+  let batalha = inicio;
+  const eventos: Evento[] = [];
+  let guarda = 0;
+
+  while (
+    !batalha.vencedor &&
+    batalha.ordem[batalha.vez] !== "heroi" &&
+    guarda < 50
+  ) {
+    batalha = executarTurno(batalha);
+    eventos.push(...batalha.eventos);
+    guarda += 1;
+  }
+
+  return { batalha, eventos };
+}
+
 export class ErroDeBatalha extends Error {
   constructor(
     readonly status: number,
@@ -169,9 +216,23 @@ export class ErroDeBatalha extends Error {
  * ofensiva e outra no que se aguenta. Aplicá-lo cru dobraria o efeito
  * pretendido.
  */
-function oponenteDe(p: Personagem) {
+function oponenteDe(p: Personagem, tipo: TipoDeBatalha) {
   const base = atributosDe(4, p.nivel);
-  const fator = Math.max(0.2, (1 / equilibrio(p.classe, p.nivel, p.camada)) ** 0.5);
+  /*
+   * O quanto o julgamento é mais duro.
+   *
+   * 1,05 parece pouco e não é: o atributo entra duas vezes no poder — uma na
+   * ofensiva, outra no que se aguenta —, então 5% a mais de atributo vira
+   * cerca de 10% a mais de poder. A primeira tentativa usou 1,35 e a medição
+   * mostrou o estrago: 8% de vitória no nível 10 e 1% no 100.
+   *
+   * Medido com 1,05: 91% de vitória no nível 10, 67% no 50, 26% na parede. É
+   * a curva desejada — confortável cedo, risco real no meio, e na parede o
+   * sinal de que a hora é de renascer, não de apostar.
+   */
+  const dureza = tipo === "julgamento" ? 1.05 : 1;
+  const fator =
+    Math.max(0.2, (1 / equilibrio(p.classe, p.nivel, p.camada)) ** 0.5) * dureza;
   const ajusta = (v: number) => Math.max(1, Math.round(v * fator));
   return {
     intelecto: ajusta(base.intelecto),
@@ -182,7 +243,12 @@ function oponenteDe(p: Personagem) {
   };
 }
 
-/** O que a vitória rende, jogando ativamente. */
-export function premioDe(nivel: number) {
-  return recompensaDe(nivel, true);
+/** O que a vitória rende. O julgamento paga o risco que cobrou. */
+export function premioDe(nivel: number, tipo: TipoDeBatalha = "comum") {
+  const base = recompensaDe(nivel, true);
+  if (tipo !== "julgamento") return base;
+  return {
+    xp: base.xp * PREMIO_DO_JULGAMENTO,
+    sucata: base.sucata * PREMIO_DO_JULGAMENTO,
+  };
 }

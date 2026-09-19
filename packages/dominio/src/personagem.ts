@@ -259,23 +259,35 @@ export function renascer(p: Personagem, classeRaiz: number): Personagem {
 const SEGUNDOS_POR_BATALHA = 30;
 
 /**
- * Vida recuperada ao vencer, em fração da máxima.
+ * Vencer devolve a vida cheia.
  *
- * Existe porque sem ela o jogo se estrangula: uma vitória apertada deixa o
- * personagem com 10% de vida, a luta seguinte é morte quase certa, e com
- * permadeath e revive pago isso vira cobrança por uma dificuldade que o
- * desenho criou. A mesma regra vale online e offline — regra que muda conforme
- * quem está olhando é regra que ninguém consegue prever.
+ * Medido antes de decidir: com recuperação de 25% a mediana era 3 batalhas até
+ * morrer; com 50%, quatro; e mesmo com cura total, 8 no nível 20 e 3 no 50. O
+ * desgaste acumulado não era o problema principal — era só o mais visível.
+ *
+ * Cura total põe a tensão DENTRO de cada batalha, que é onde ela pode ser
+ * jogada. Perder por dano de arranhão herdado de três lutas atrás não é
+ * decisão de ninguém, é só contabilidade.
  */
-export const RECUPERACAO_POR_VITORIA = 0.25;
+export function vidaAposVitoria(p: Personagem): number {
+  return vidaMaximaDe(p);
+}
 
-/** A vida com que se sai de uma vitória, já com a recuperação. */
-export function vidaAposVitoria(p: Personagem, vidaNaBatalha: number): number {
-  const maxima = vidaMaximaDe(p);
-  return Math.min(
-    maxima,
-    Math.max(1, vidaNaBatalha) + Math.round(maxima * RECUPERACAO_POR_VITORIA),
-  );
+/**
+ * Perder uma batalha comum é recuar, não morrer.
+ *
+ * Esta é a peça que faltava, e a medição obrigou a ela: com ~25% de derrota
+ * por luta, perder significando morte dava uma morte a cada 3 ou 4 batalhas.
+ * Com permadeath e revive pago em moeda comprada, isso não é dificuldade — é
+ * uma máquina de extração, e foi construída sem ninguém decidir que seria
+ * assim.
+ *
+ * A morte permanente continua existindo, e continua sendo permadeath. Ela só
+ * passa a acontecer onde a pessoa ESCOLHEU arriscar: no julgamento. É o que o
+ * nome do jogo já dizia.
+ */
+export function recuar(p: Personagem): Personagem {
+  return { ...p, vida: Math.max(1, Math.round(vidaMaximaDe(p) * 0.35)) };
 }
 
 export interface RelatorioOffline {
@@ -333,7 +345,6 @@ export function progredirOffline(
   let vitorias = 0;
   let xpGanho = 0;
   let sucataGanha = 0;
-  let morreu = false;
 
   for (let i = 0; i < total; i++) {
     const heroi = criarCombatente({
@@ -375,14 +386,13 @@ export function progredirOffline(
       atual = {
         ...ganho.personagem,
         sucata: ganho.personagem.sucata + recompensa.sucata,
-        vida: vidaAposVitoria(
-          ganho.personagem,
-          batalha.combatentes.heroi?.vida ?? 1,
-        ),
+        vida: vidaAposVitoria(ganho.personagem),
       };
     } else {
-      atual = morrer(atual);
-      morreu = true;
+      // Offline só há batalha comum: derrota é recuo. Morte automática
+      // enquanto ninguém olha seria punir a ausência, e a pessoa não escolheu
+      // arriscar nada.
+      atual = recuar(atual);
       break;
     }
   }
@@ -394,7 +404,8 @@ export function progredirOffline(
     vitorias,
     xpGanho: Math.round(xpGanho),
     sucataGanha,
-    morreu,
+    // Offline nunca mata: só há batalha comum, e derrota ali é recuo.
+    morreu: false,
   };
 }
 

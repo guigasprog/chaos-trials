@@ -18,12 +18,18 @@ import {
   renascer,
   reviver,
   subclassesDisponiveis,
+  recuar,
   vidaAposVitoria,
   vidaMaximaDe,
   xpParaNivel,
 } from "@chaos/dominio";
 import type { Armazenamento } from "./armazenamento.ts";
-import { Batalhas, ErroDeBatalha, premioDe } from "./batalhas.ts";
+import {
+  Batalhas,
+  ErroDeBatalha,
+  premioDe,
+  type TipoDeBatalha,
+} from "./batalhas.ts";
 
 /**
  * A API.
@@ -181,11 +187,26 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       return resposta.status(409).send({ erro: "sem vida para lutar" });
     }
 
-    const sessao = batalhas.iniciar(personagem, agora());
+    const corpo = pedido.body as { tipo?: TipoDeBatalha } | undefined;
+    const tipo: TipoDeBatalha =
+      corpo?.tipo === "julgamento" ? "julgamento" : "comum";
+
+    const sessao = batalhas.iniciar(personagem, agora(), tipo);
     return resposta.status(201).send({
       id: sessao.id,
+      tipo,
+      // Dito na resposta, e não só no comentário: a tela precisa avisar antes
+      // que esta é a luta em que se morre de verdade.
+      mortal: tipo === "julgamento",
       estado: estadoDaBatalha(sessao),
-      eventos: sessao.batalha.eventos,
+      // A abertura do inimigo entra aqui: quando ele é mais ágil, já agiu
+      // antes de o jogador poder fazer qualquer coisa, e a tela precisa
+      // mostrar isso em vez de a vida aparecer menor sem explicação.
+      eventos: [...sessao.batalha.eventos, ...sessao.aberturaDoInimigo],
+      // Pode ter acabado antes do primeiro turno do jogador.
+      resultado: sessao.batalha.vencedor
+        ? await concluir(personagem, sessao)
+        : null,
     });
   });
 
@@ -214,23 +235,40 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
 
   async function concluir(guardado: Personagem, sessao: ReturnType<Batalhas["iniciar"]>) {
     const venceu = sessao.batalha.vencedor === "jogador";
-    const vidaFinal = sessao.batalha.combatentes.heroi?.vida ?? 0;
 
     if (!venceu) {
-      const morto = morrer({ ...guardado, vida: 0 });
-      await armazenamento.salvar(morto);
-      return { venceu: false, xp: 0, sucata: 0, niveisSubidos: 0, morreu: true };
+      // A distinção central: só o julgamento mata, porque só nele a pessoa
+      // escolheu arriscar. Perder uma batalha comum é recuar ferido.
+      //
+      // Medido antes de decidir: com ~25% de derrota por luta, derrota
+      // significando morte dava uma morte a cada 3 ou 4 batalhas — e com
+      // permadeath e revive pago em moeda comprada, isso não é dificuldade,
+      // é extração.
+      const depois =
+        sessao.tipo === "julgamento"
+          ? morrer({ ...guardado, vida: 0 })
+          : recuar(guardado);
+      await armazenamento.salvar(depois);
+      return {
+        venceu: false,
+        xp: 0,
+        sucata: 0,
+        niveisSubidos: 0,
+        morreu: sessao.tipo === "julgamento",
+        recuou: sessao.tipo !== "julgamento",
+        personagem: paraCliente(depois),
+      };
     }
 
-    const premio = premioDe(sessao.nivelInicial);
-    const ganho = ganharXp({ ...guardado, vida: vidaFinal }, premio.xp);
+    const premio = premioDe(sessao.nivelInicial, sessao.tipo);
+    const ganho = ganharXp(guardado, premio.xp);
     const atualizado: Personagem = {
       ...ganho.personagem,
       sucata: ganho.personagem.sucata + premio.sucata,
       // A mesma recuperação que o offline aplica. Sem ela, uma vitória
       // apertada deixa a luta seguinte impossível — e com revive pago isso
       // seria cobrar por uma dificuldade que o desenho criou.
-      vida: vidaAposVitoria(ganho.personagem, vidaFinal),
+      vida: vidaAposVitoria(ganho.personagem),
     };
     await armazenamento.salvar(atualizado);
 
@@ -240,6 +278,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       sucata: premio.sucata,
       niveisSubidos: ganho.niveisSubidos,
       morreu: false,
+      recuou: false,
       personagem: paraCliente(atualizado),
     };
   }

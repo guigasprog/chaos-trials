@@ -136,6 +136,16 @@ export const OFFLINE_TETO_HORAS = 8;
  *  produto — o offline é recuperação, não substituto. */
 export const OFFLINE_RITMO = 0.35;
 
+// ── Batalhas e morte ─────────────────────────────────────────────────────
+
+/**
+ * Quanto o julgamento rende a mais que uma batalha comum.
+ *
+ * O prêmio precisa pagar o risco. Sem diferença, ninguém aceitaria a aposta e
+ * o julgamento seria letra morta.
+ */
+export const PREMIO_DO_JULGAMENTO = 6;
+
 // ── Morte ────────────────────────────────────────────────────────────────
 
 /** Preço do revive em moeda premium. Personagem no túmulo não rende nada e é

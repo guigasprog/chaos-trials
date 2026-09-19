@@ -169,6 +169,85 @@ describe("batalha", () => {
   });
 });
 
+describe("comum contra julgamento", () => {
+  it("perder uma batalha comum é recuar, não morrer", async () => {
+    // A regra que a medição obrigou: com ~25% de derrota por luta, derrota
+    // significando morte dava uma morte a cada 3 ou 4 batalhas — com revive
+    // pago, isso é extração, não dificuldade.
+    const fraco: Personagem = {
+      id: "fraco", nome: "Fraco", classe: 4, nivel: 1500, xp: 0, camada: 0,
+      estado: "vivo", vida: 5000, visto: AGORA, sucata: 0, premium: 0, mortes: 0,
+    };
+    const local = montar([fraco]);
+
+    const inicio = await local.inject({
+      method: "POST", url: "/personagens/fraco/batalhas", payload: { tipo: "comum" },
+    });
+    assert.equal(inicio.json().mortal, false);
+
+    let resultado = null;
+    for (let i = 0; i < 300 && !resultado; i++) {
+      const r = await local.inject({
+        method: "POST",
+        url: `/batalhas/${inicio.json().id}/turnos`,
+        payload: { habilidade: "golpe" },
+      });
+      if (r.statusCode !== 200) break;
+      resultado = r.json().resultado;
+    }
+
+    assert.ok(resultado, "a batalha não terminou");
+    assert.equal(resultado.venceu, false, "o cenário era de derrota certa");
+    assert.equal(resultado.morreu, false, "derrota comum matou");
+    assert.equal(resultado.recuou, true);
+    assert.equal(resultado.personagem.estado, "vivo");
+    await local.close();
+  });
+
+  it("o julgamento se anuncia como mortal antes de começar", async () => {
+    const p = await criar();
+    const r = await app.inject({
+      method: "POST", url: `/personagens/${p.id}/batalhas`,
+      payload: { tipo: "julgamento" },
+    });
+    assert.equal(r.statusCode, 201);
+    // A tela precisa poder avisar: esta é a luta em que se morre de verdade.
+    assert.equal(r.json().mortal, true);
+    assert.equal(r.json().tipo, "julgamento");
+  });
+
+  it("perder um julgamento leva ao túmulo", async () => {
+    const condenado: Personagem = {
+      id: "condenado", nome: "Condenado", classe: 4, nivel: 1500, xp: 0,
+      camada: 0, estado: "vivo", vida: 5000, visto: AGORA, sucata: 0,
+      premium: 0, mortes: 0,
+    };
+    const local = montar([condenado]);
+
+    const inicio = await local.inject({
+      method: "POST", url: "/personagens/condenado/batalhas",
+      payload: { tipo: "julgamento" },
+    });
+
+    let resultado = null;
+    for (let i = 0; i < 300 && !resultado; i++) {
+      const r = await local.inject({
+        method: "POST",
+        url: `/batalhas/${inicio.json().id}/turnos`,
+        payload: { habilidade: "golpe" },
+      });
+      if (r.statusCode !== 200) break;
+      resultado = r.json().resultado;
+    }
+
+    assert.ok(resultado);
+    assert.equal(resultado.venceu, false);
+    assert.equal(resultado.morreu, true, "o julgamento devia matar");
+    assert.equal(resultado.personagem.estado, "tumulo");
+    await local.close();
+  });
+});
+
 describe("túmulo e revive", () => {
   const morto = (): Personagem => ({
     id: "morto",

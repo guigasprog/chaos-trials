@@ -244,6 +244,32 @@ Consequência para a economia: o revive é o maior sorvedouro de moeda premium
 do jogo, e portanto o principal formador de preço no mercado entre jogadores
 (sub-projeto 3). Isto precisa entrar no balanceamento daquela spec.
 
+### 8.1 Batalha comum e julgamento
+
+Morrer em qualquer derrota não sobreviveu ao contato com a medição. Com ~25%
+de derrota por luta, isso dava **uma morte a cada 3 ou 4 batalhas** — e com
+permadeath e revive pago em moeda comprada, isso não é dificuldade, é uma
+máquina de extração que ninguém decidiu construir.
+
+O jogo passa a ter dois tipos de encontro, e o nome sempre disse qual era qual:
+
+- **Comum** — perder é recuar ferido. Sem morte, sem prêmio. É o que se
+  enfrenta para progredir sem apostar nada.
+- **Julgamento** — perder é morrer de verdade, e é a **única** forma de morrer
+  no jogo, porque é a única em que a pessoa escolheu arriscar. Paga 6x.
+
+Vencer devolve a vida cheia. Medido antes de decidir: com recuperação de 25% a
+mediana era 3 batalhas até morrer; com 50%, quatro; e mesmo com cura total, 8
+no nível 20. A tensão precisa estar DENTRO de uma batalha, onde pode ser
+jogada — perder por dano de arranhão herdado de três lutas atrás não é decisão
+de ninguém.
+
+**Em aberto, para calibrar:** com 67% de vitória no julgamento e prêmio de 6x,
+a aposta ainda é dura para quem não paga — uma ida ao túmulo a cada três
+julgamentos. Ou o prêmio sobe, ou o risco cai, ou o julgamento deixa de ser
+opcional e vira o portão do renascimento (uma vez por vida, e não a qualquer
+momento). A terceira é a que melhor casa com o nome do jogo.
+
 ## 9. Progressão offline
 
 Na reconexão o servidor calcula o tempo decorrido e roda N ciclos de combate

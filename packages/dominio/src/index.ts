@@ -8,3 +8,4 @@ export * from "./efeitos.ts";
 export * from "./habilidades.ts";
 export * from "./batalha.ts";
 export * from "./personagem.ts";
+export { PREMIO_DO_JULGAMENTO } from "./balanceamento.ts";
