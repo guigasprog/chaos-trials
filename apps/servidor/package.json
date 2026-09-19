@@ -1,0 +1,16 @@
+{
+  "name": "@chaos/servidor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --import tsx --watch src/principal.ts",
+    "inicio": "node --import tsx src/principal.ts",
+    "teste": "node ../../scripts/testar.mjs",
+    "tipos": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@chaos/dominio": "*",
+    "fastify": "^5.2.1"
+  }
+}

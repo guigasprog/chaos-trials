@@ -258,6 +258,26 @@ export function renascer(p: Personagem, classeRaiz: number): Personagem {
 /** Quanto tempo uma batalha automática representa. */
 const SEGUNDOS_POR_BATALHA = 30;
 
+/**
+ * Vida recuperada ao vencer, em fração da máxima.
+ *
+ * Existe porque sem ela o jogo se estrangula: uma vitória apertada deixa o
+ * personagem com 10% de vida, a luta seguinte é morte quase certa, e com
+ * permadeath e revive pago isso vira cobrança por uma dificuldade que o
+ * desenho criou. A mesma regra vale online e offline — regra que muda conforme
+ * quem está olhando é regra que ninguém consegue prever.
+ */
+export const RECUPERACAO_POR_VITORIA = 0.25;
+
+/** A vida com que se sai de uma vitória, já com a recuperação. */
+export function vidaAposVitoria(p: Personagem, vidaNaBatalha: number): number {
+  const maxima = vidaMaximaDe(p);
+  return Math.min(
+    maxima,
+    Math.max(1, vidaNaBatalha) + Math.round(maxima * RECUPERACAO_POR_VITORIA),
+  );
+}
+
 export interface RelatorioOffline {
   readonly personagem: Personagem;
   readonly horasCreditadas: number;
@@ -355,12 +375,9 @@ export function progredirOffline(
       atual = {
         ...ganho.personagem,
         sucata: ganho.personagem.sucata + recompensa.sucata,
-        // Recupera parte da vida entre batalhas; sem isso, uma sequência longa
-        // mataria qualquer um por acúmulo.
-        vida: Math.min(
-          vidaMaximaDe(ganho.personagem),
-          (batalha.combatentes.heroi?.vida ?? 1) +
-            Math.round(vidaMaximaDe(ganho.personagem) * 0.25),
+        vida: vidaAposVitoria(
+          ganho.personagem,
+          batalha.combatentes.heroi?.vida ?? 1,
         ),
       };
     } else {
