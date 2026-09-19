@@ -110,8 +110,13 @@ for (const nivel of [1, 10, 30, 60, 100]) {
 
 // ── Curva de XP ──────────────────────────────────────────────────────────
 
-titulo("CURVA DE XP — custo por nível e acumulado");
-console.log("  nível".padEnd(10) + "custo do nível".padEnd(20) + "acumulado");
+titulo("CURVA DE XP");
+// As duas colunas respondem perguntas diferentes sobre a mesma linha, e sem
+// dizer isso o nível 1 lê como erro: custa 50 e tem 0 acumulado, porque
+// ninguém paga nada para já estar no nível 1.
+console.log(
+  "  nível".padEnd(10) + "para sair deste".padEnd(20) + "gasto até chegar aqui",
+);
 linha();
 for (const n of [1, 10, 30, 60, 100]) {
   console.log(
