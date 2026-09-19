@@ -11,18 +11,39 @@ import {
   xpParaNivel,
 } from "../src/progressao.ts";
 import { compara, maiorQue, paraNumero } from "../src/grande.ts";
-import { NIVEL_MAXIMO } from "../src/balanceamento.ts";
+import { NIVEL_DA_PAREDE_BASE } from "../src/balanceamento.ts";
+import { nivelDaParede } from "../src/progressao.ts";
 
 describe("curva de XP", () => {
-  it("cresce sempre, e o acumulado bate com a soma dos níveis", () => {
-    let soma = 0;
-    for (let n = 1; n < 60; n++) {
+  it("cresce sempre", () => {
+    for (let n = 1; n < 500; n++) {
       assert.ok(xpParaNivel(n + 1) > xpParaNivel(n));
+    }
+  });
+
+  it("o acumulado é zero no nível 1 e cresce a partir dali", () => {
+    assert.equal(paraNumero(xpAcumuladoAte(1)), 0);
+    assert.ok(maiorQue(xpAcumuladoAte(100), xpAcumuladoAte(50)));
+  });
+
+  it("a aproximação pela integral bate com a soma real", () => {
+    // O laço é impraticável no nível 10 milhões, então o acumulado usa a
+    // integral. Aqui se confirma que ela não mente onde dá para conferir.
+    let soma = 0;
+    for (let n = 1; n < 400; n++) {
       soma += xpParaNivel(n);
-      // A fórmula fechada tem de dar o mesmo que somar um a um — ela existe só
-      // para não empilhar 99 arredondamentos a cada vitória.
-      const diferenca = Math.abs(xpAcumuladoAte(n + 1) - soma) / soma;
-      assert.ok(diferenca < 1e-9, `nível ${n}: fórmula e soma divergiram`);
+      if (n < 50) continue;
+      const erro = Math.abs(paraNumero(xpAcumuladoAte(n + 1)) - soma) / soma;
+      assert.ok(erro < 0.01, `nível ${n}: integral errou ${(erro * 100).toFixed(2)}%`);
+    }
+  });
+
+  it("permanece finito em níveis que só existem em camadas altas", () => {
+    // Com a curva exponencial anterior, o nível 10 mil era Infinity — o que
+    // fechava a porta para a parede avançar.
+    for (const n of [1e3, 1e5, 1e7]) {
+      assert.ok(Number.isFinite(xpParaNivel(n)), `nível ${n} estourou`);
+      assert.ok(Number.isFinite(xpAcumuladoAte(n).e));
     }
   });
 
@@ -46,9 +67,12 @@ describe("prestígio", () => {
     }
   });
 
-  it("só libera o renascimento no nível máximo", () => {
-    assert.ok(!podeRenascer(NIVEL_MAXIMO - 1));
-    assert.ok(podeRenascer(NIVEL_MAXIMO));
+  it("só libera o renascimento ao chegar na parede da camada", () => {
+    assert.ok(!podeRenascer(NIVEL_DA_PAREDE_BASE - 1, 0));
+    assert.ok(podeRenascer(NIVEL_DA_PAREDE_BASE, 0));
+    // E a parede da camada seguinte é mais longe: o que bastava antes não basta
+    // mais, que é o ponto do prestígio.
+    assert.ok(!podeRenascer(NIVEL_DA_PAREDE_BASE, 1));
   });
 
   it("recusa camada negativa ou fracionária", () => {
@@ -58,73 +82,82 @@ describe("prestígio", () => {
 });
 
 /**
- * O teste que faltava.
+ * Os testes que faltavam.
  *
- * A primeira versão do balanceamento fazia o inimigo crescer exponencialmente
- * enquanto os atributos do jogador crescem linearmente. Linear não alcança
- * exponencial: no nível 70 o jogo já era impossível e no 100 o jogador estava
- * 970x atrás. Nenhum teste pegou, porque todos olhavam peças isoladas — e o
- * defeito só existe na relação entre duas curvas.
+ * Duas versões do balanceamento quebraram aqui antes de existir este bloco, e
+ * nenhum outro teste pegaria: todos olham peças isoladas, e estes defeitos só
+ * existem na RELAÇÃO entre duas curvas.
  */
-describe("equilíbrio entre jogador e inimigo", () => {
-  /** Abaixo disto o nível é intransponível, e não apenas difícil. */
-  const PISO = 0.5;
-  /**
-   * Acima disto o conteúdo virou enfeite.
-   *
-   * 12 e não 4 porque o Tank deriva mais que os outros: `vigor` entra duas
-   * vezes na vida efetiva — uma na vida máxima, outra na redução de dano —,
-   * então ele cresce com expoente 2,32 contra 2,06 dos demais. É a identidade
-   * da classe, e o fim da vida é justamente quando se renasce.
-   */
-  const TETO = 12;
-
-  it("nenhum nível de nenhuma classe fica impossível", () => {
+describe("a parede, e o caminho até ela", () => {
+  it("a vida começa confortável, sem ser passeio", () => {
+    // Sem o deslocamento da curva do inimigo, o nível 1 dava 10.000x de
+    // vantagem e a resistência real só começava lá pelo nível 50.
     for (const classe of RAIZES) {
-      for (let nivel = 1; nivel <= NIVEL_MAXIMO; nivel++) {
-        const r = equilibrio(classe.indice, nivel);
+      const r = equilibrio(classe.indice, 1, 0);
+      assert.ok(r > 1.5, `${classe.nome} começa sufocado: ${r.toFixed(2)}`);
+      assert.ok(r < 8, `${classe.nome} começa invencível: ${r.toFixed(2)}`);
+    }
+  });
+
+  it("o inimigo alcança o jogador conforme a vida avança", () => {
+    // É o oposto do que uma versão anterior deste arquivo afirmava. Sem isso
+    // não existe parede, e sem parede o prestígio não tem para onde levar.
+    let anterior = Infinity;
+    for (const nivel of [1, 10, 25, 50, 75, 100]) {
+      const r = equilibrio(4, nivel, 0);
+      assert.ok(r < anterior, `nível ${nivel} não apertou em relação ao anterior`);
+      anterior = r;
+    }
+  });
+
+  it("na parede as duas curvas se cruzam, em qualquer camada", () => {
+    for (const camada of [0, 1, 5, 10, 20, 50, 100]) {
+      const nivel = Math.round(nivelDaParede(camada));
+      const r = equilibrio(4, nivel, camada);
+      assert.ok(
+        Math.abs(r - 1) < 0.05,
+        `camada ${camada}: na parede (nível ${nivel}) a razão era ${r.toFixed(3)}`,
+      );
+    }
+  });
+
+  it("a rampa até a parede é contínua, sem trecho intransponível", () => {
+    for (const classe of RAIZES) {
+      for (let nivel = 1; nivel <= NIVEL_DA_PAREDE_BASE; nivel++) {
+        const r = equilibrio(classe.indice, nivel, 0);
         assert.ok(
-          r >= PISO,
-          `${classe.nome} no nível ${nivel}: razão ${r.toFixed(3)} — intransponível`,
-        );
-        assert.ok(
-          r <= TETO,
-          `${classe.nome} no nível ${nivel}: razão ${r.toFixed(3)} — trivial`,
+          r >= 0.9,
+          `${classe.nome} no nível ${nivel}: razão ${r.toFixed(3)} antes da parede`,
         );
       }
     }
   });
 
-  it("subir de nível é sentido como progresso", () => {
-    // O jogador tem de abrir vantagem ao longo da vida, senão o nível não
-    // significa nada — mas devagar, senão o fim da vida vira passeio.
-    const inicio = equilibrio(1, 5);
-    const fim = equilibrio(1, NIVEL_MAXIMO);
-    assert.ok(fim > inicio, "o nível 100 não estava melhor que o 5");
-    assert.ok(fim / inicio < 10, "a vantagem ao longo da vida é grande demais");
-  });
-
-  it("o equilíbrio se mantém em qualquer camada, inclusive absurda", () => {
-    // A razão é quase independente da camada, porque os dois lados multiplicam.
-    // O que muda é o quanto o jogador avança antes de bater na parede.
-    for (const camada of [0, 1, 40, 200, 1000]) {
-      const r = equilibrio(1, 50, camada);
-      assert.ok(
-        Number.isFinite(r) && r > 0,
-        `camada ${camada} produziu razão ${r}`,
-      );
+  it("cada camada empurra a parede para mais fundo", () => {
+    let anterior = 0;
+    for (const camada of [0, 1, 5, 10, 30, 100]) {
+      const parede = nivelDaParede(camada);
+      assert.ok(parede > anterior, `a camada ${camada} não avançou`);
+      assert.ok(Number.isFinite(parede), `a camada ${camada} deu ${parede}`);
+      anterior = parede;
     }
   });
 
-  it("cada camada deixa o jogador mais adiantado que a anterior", () => {
-    // É o motor da progressão infinita: o jogador ganha 1,6 por camada e o
-    // inimigo 1,45, então a diferença se acumula e cada vida chega mais longe.
-    // Sem isso o prestígio seria decorativo.
-    const r0 = equilibrio(1, 50, 0);
-    const r10 = equilibrio(1, 50, 10);
-    const r50 = equilibrio(1, 50, 50);
-    assert.ok(r10 > r0, "a camada 10 não estava melhor que a 0");
-    assert.ok(r50 > r10, "a camada 50 não estava melhor que a 10");
+  it("a camada nova não torna trivial o que já foi vencido — leva adiante", () => {
+    // A falha da versão anterior: jogador e inimigo escalavam ambos por
+    // camada, o jogador mais rápido, e na camada 35 o conteúdo já era enfeite
+    // porque a vantagem composta não tinha onde ser gasta.
+    const paredeAnterior = Math.round(nivelDaParede(9));
+    const naParedeVelha = equilibrio(4, paredeAnterior, 10);
+    const naParedeNova = equilibrio(4, Math.round(nivelDaParede(10)), 10);
+    assert.ok(
+      naParedeVelha > 1,
+      "a parede anterior devia ficar fácil com a camada nova",
+    );
+    assert.ok(
+      Math.abs(naParedeNova - 1) < 0.05,
+      "a parede nova devia ser o novo limite",
+    );
   });
 
   it("os cinco ramos ficam na mesma faixa — nenhum é a escolha óbvia", () => {
@@ -139,11 +172,16 @@ describe("equilíbrio entre jogador e inimigo", () => {
 });
 
 describe("poder", () => {
-  it("cresce com nível e com camada", () => {
+  it("o do jogador cresce com nível e com camada", () => {
     assert.ok(maiorQue(poderDoPersonagem(1, 50), poderDoPersonagem(1, 10)));
     assert.ok(maiorQue(poderDoPersonagem(1, 50, 5), poderDoPersonagem(1, 50, 0)));
+  });
+
+  it("o do inimigo cresce com nível e NÃO depende da camada", () => {
+    // É a decisão central do modelo: a dificuldade de um nível é fixa, e o que
+    // a camada muda é até onde se chega.
     assert.ok(maiorQue(poderDoInimigo(50), poderDoInimigo(10)));
-    assert.ok(maiorQue(poderDoInimigo(50, 5), poderDoInimigo(50, 0)));
+    assert.equal(poderDoInimigo.length, 1, "poderDoInimigo não deve receber camada");
   });
 
   it("classes do mesmo ramo têm o mesmo poder de referência", () => {

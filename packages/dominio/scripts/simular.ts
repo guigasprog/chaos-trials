@@ -19,10 +19,9 @@ import {
 import { RAIZES, ramoDe } from "../src/classe.ts";
 import { grande, potencia, produto, texto } from "../src/grande.ts";
 import {
-  CRESCIMENTO_POR_CAMADA,
-  DERIVA_DA_VIDA,
+  AVANCO_DA_PAREDE_POR_CAMADA,
+  NIVEL_DA_PAREDE_BASE,
   NIVEL_DA_SUBCLASSE,
-  NIVEL_MAXIMO,
   OFFLINE_RITMO,
   OFFLINE_TETO_HORAS,
   PRECO_REVIVE,
@@ -30,6 +29,7 @@ import {
 import {
   equilibrio,
   multiplicadorDaCamada,
+  nivelDaParede,
   poderDoInimigo,
   poderDoPersonagem,
   xpAcumuladoAte,
@@ -118,11 +118,11 @@ console.log(
   "  nível".padEnd(10) + "para sair deste".padEnd(20) + "gasto até chegar aqui",
 );
 linha();
-for (const n of [1, 10, 30, 60, 100]) {
+for (const n of [1, 10, 100, 1000, 100_000]) {
   console.log(
     `  ${n}`.padEnd(10) +
       texto(grande(xpParaNivel(n))).padEnd(20) +
-      texto(grande(xpAcumuladoAte(n))),
+      texto(xpAcumuladoAte(n)),
   );
 }
 
@@ -143,7 +143,7 @@ for (const camada of [0, 1, 5, 10, 20, 40, 79, 80, 200, 1000]) {
 
 // ── O confronto ──────────────────────────────────────────────────────────
 
-titulo("CONFRONTO — poder do jogador contra o do inimigo, por nível");
+titulo("A RAMPA — dentro de uma vida, o inimigo alcança o jogador");
 console.log(
   "  nível".padEnd(9) +
     "jogador".padEnd(14) +
@@ -151,49 +151,48 @@ console.log(
     "razão jogador/inimigo",
 );
 linha();
-
-for (const nivel of [1, 2, 5, 10, 30, 50, 70, 100]) {
-  const r = equilibrio(1, nivel);
-  const aviso = r < 0.5 ? "   ← intransponível" : r > 12 ? "   ← trivial" : "";
+for (const nivel of [1, 10, 25, 50, 75, 100, 120]) {
+  const r = equilibrio(4, nivel);
+  const nota =
+    nivel === NIVEL_DA_PAREDE_BASE
+      ? "   ← A PAREDE: hora de renascer"
+      : r < 1
+        ? "   ← além da parede, sem camada nova"
+        : "";
   console.log(
     `  ${nivel}`.padEnd(9) +
-      texto(poderDoPersonagem(1, nivel)).padEnd(14) +
+      texto(poderDoPersonagem(4, nivel)).padEnd(14) +
       texto(poderDoInimigo(nivel)).padEnd(16) +
-      `${r.toFixed(2)}${aviso}`,
+      `${r.toFixed(2)}${nota}`,
   );
 }
 
-titulo("CONFRONTO — a mesma razão, por camada de prestígio (nível 50)");
-console.log("  camada".padEnd(12) + "razão jogador/inimigo");
+titulo("A PAREDE AVANÇA — é isso que torna a progressão infinita");
+console.log(
+  "  camada".padEnd(10) +
+    "multiplicador".padEnd(18) +
+    "parede no nível".padEnd(20) +
+    "razão ali",
+);
 linha();
-for (const camada of [0, 1, 5, 10, 25, 50, 100]) {
-  const r = equilibrio(1, 50, camada);
-  const aviso = r > 100 ? "   ← conteúdo virou enfeite" : "";
+for (const camada of [0, 1, 5, 10, 20, 30, 50, 100]) {
+  const parede = Math.round(nivelDaParede(camada));
   console.log(
-    `  ${camada}`.padEnd(12) +
-      (r > 1e4 ? r.toExponential(2) : r.toFixed(2)) +
-      aviso,
+    `  ${camada}`.padEnd(10) +
+      texto(multiplicadorDaCamada(camada)).padEnd(18) +
+      texto(grande(parede)).padEnd(20) +
+      equilibrio(4, parede, camada).toFixed(3),
   );
 }
+console.log(`
+  A dificuldade de um nível é FIXA — o inimigo do nível 500 é o mesmo na camada
+  1 e na camada 90. A camada multiplica só o jogador, e por isso a parede se
+  afasta ${AVANCO_DA_PAREDE_POR_CAMADA.toFixed(3)}x a cada renascimento em vez de o conteúdo virar enfeite.
 
-const camadaTrivial = [...Array(200).keys()].find((c) => equilibrio(1, 50, c) > 100);
-if (camadaTrivial !== undefined) {
-  console.log(`
-  EM ABERTO — a partir da camada ${camadaTrivial} o jogador está 100x acima do
-  inimigo, e o conteúdo da camada deixa de oferecer resistência.
-
-  A causa: o jogador ganha 1,6 por camada e o inimigo 1,45, e essa diferença
-  composta cresce sem limite. É o mesmo mecanismo que faz a progressão nunca
-  parar — não dá para removê-lo sem tornar o prestígio decorativo.
-
-  O que falta é a outra metade do desenho: algo que consuma a vantagem
-  acumulada. Nos jogos do gênero isso costuma ser o teto de nível subindo a
-  cada camada, de modo que o multiplicador leve mais longe em vez de tornar o
-  mesmo trecho trivial. Hoje o teto é fixo em ${NIVEL_MAXIMO}, então não há
-  para onde a vantagem ir.
-
-  Decisão de produto, não de implementação — está registrada nos riscos.`);
-}
+  Foi exatamente este ponto que quebrou na versão anterior: jogador e inimigo
+  escalavam os dois por camada, o jogador mais rápido, e a vantagem composta
+  não tinha onde ser gasta — na camada 35 já não havia resistência nenhuma.
+`);
 
 titulo("EQUILÍBRIO ENTRE OS CINCO RAMOS (nível 50)");
 console.log("  classe".padEnd(12) + "razão");
@@ -205,22 +204,22 @@ for (const c of RAIZES) {
   console.log(`  ${c.nome}`.padEnd(12) + r.toFixed(2));
 }
 for (const c of RAIZES) {
-  for (let n = 1; n <= NIVEL_MAXIMO; n++) pior = Math.min(pior, equilibrio(c.indice, n));
+  for (let n = 1; n <= NIVEL_DA_PAREDE_BASE; n++) {
+    pior = Math.min(pior, equilibrio(c.indice, n));
+  }
 }
 
 // ── Veredito ─────────────────────────────────────────────────────────────
 
 titulo("VEREDITO");
-if (pior < 0.1) {
+if (pior < 0.9) {
   console.log(`
-  QUEBRADO. O jogador fica ${(1 / pior).toFixed(0)}x atrás do inimigo.
-
-  Algum nível ficou intransponível.`);
+  QUEBRADO — algum nível antes da parede ficou intransponível (razão ${pior.toFixed(2)}).`);
 } else {
   console.log(`
-  Curva sustentável em todos os níveis das cinco classes.
-  Pior razão jogador/inimigo encontrada: ${pior.toFixed(2)} (piso aceitável: 0,50).
-  Deriva ao longo de uma vida: nivel^${DERIVA_DA_VIDA} — cerca de ${(100 ** DERIVA_DA_VIDA).toFixed(1)}x do nível 1 ao 100.`);
+  Rampa contínua nos cinco ramos, do nível 1 até a parede.
+  Pior razão antes da parede: ${pior.toFixed(2)}.
+  A parede sempre existe, e sempre está mais longe que na vida anterior.`);
 }
 
 titulo("OUTROS NÚMEROS");

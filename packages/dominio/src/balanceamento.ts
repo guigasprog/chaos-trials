@@ -22,17 +22,57 @@
  */
 export const CRESCIMENTO_POR_CAMADA = 1.6;
 
-/** Nível que libera o renascimento. Subir além disso não rende mais nada. */
-export const NIVEL_MAXIMO = 100;
+/**
+ * Onde fica a parede na camada 0 — o nível em que o inimigo alcança o jogador.
+ *
+ * Não é um teto imposto: é onde a curva do inimigo cruza a do jogador. Passar
+ * dali exige o multiplicador de uma camada nova, e é esse cruzamento que dá
+ * destino à vantagem do prestígio.
+ */
+export const NIVEL_DA_PAREDE_BASE = 100;
+
+/**
+ * Quanto a parede avança por camada: 26,5% mais fundo a cada renascimento.
+ *
+ * É o coração da progressão infinita, e o número é derivado, não escolhido: com
+ * o jogador ganhando 1,6 por camada e a parede caindo com a raiz disso, cada
+ * camada leva `√1,6 ≈ 1,265` vezes mais longe. Camada 10 chega ao nível ~1.000;
+ * camada 30, a ~10.000. Sempre há uma parede à frente, e ela sempre está mais
+ * longe que a anterior.
+ */
+export const AVANCO_DA_PAREDE_POR_CAMADA = Math.sqrt(CRESCIMENTO_POR_CAMADA);
+
+/**
+ * Deslocamento da curva do inimigo, em níveis.
+ *
+ * Sem ele a curva sai de zero, e o começo da vida fica sem resistência
+ * nenhuma: medido, o jogador tinha 10.000x de vantagem no nível 1 e só
+ * encontrava oposição real a partir do nível 50 — metade da vida era passeio.
+ *
+ * Deslocando em 100, a vida começa com ~4x de folga (confortável, não
+ * trivial) e fecha em 1x na parede. A rampa fica contínua do primeiro nível ao
+ * último.
+ */
+export const DESLOCAMENTO_DO_INIMIGO = 100;
 
 // ── Nível ────────────────────────────────────────────────────────────────
 
 /** XP do primeiro nível. */
 export const XP_BASE = 50;
 
-/** Cada nível custa 18% a mais que o anterior: o nível 30 sai a 143× o
- *  primeiro, e o 60 a ~2e4×. */
-export const CRESCIMENTO_XP = 1.18;
+/**
+ * Custo de XP por nível: `XP_BASE × nivel ^ 2,2`.
+ *
+ * Polinomial, e não exponencial. A primeira versão usava `1,18 ^ nivel`, o que
+ * tornava qualquer nível acima de ~200 inalcançável por construção — e isso
+ * fecha a porta para o teto de nível subir a cada camada, que é justamente o
+ * que dá destino à vantagem do prestígio.
+ *
+ * Polinomial deixa o nível crescer sem limite prático: o custo sobe rápido o
+ * bastante para o avanço ser sentido, devagar o bastante para o nível 10.000
+ * existir.
+ */
+export const EXPOENTE_XP = 2.2;
 
 /**
  * Em que nível cada profundidade da árvore abre.
@@ -55,35 +95,26 @@ export const NIVEL_DA_SUBCLASSE: Readonly<Record<number, number>> = {
 export const CLASSE_DE_REFERENCIA = 4;
 
 /**
- * Quanto o jogador abre de vantagem ao longo de uma vida: `nivel ^ 0,3`, o que
- * dá cerca de 4x entre o nível 1 e o 100.
+ * Quanto mais rápido o inimigo cresce que o jogador, em expoente.
  *
- * O inimigo é definido **em relação ao poder de um personagem de referência
- * naquele nível**, e não por uma lei de potência própria. Isso importa: duas
- * tentativas anteriores usaram fórmula independente e as duas quebraram, cada
- * uma numa ponta. `1,15 ^ nivel` era exponencial contra o crescimento linear
- * dos atributos, e no nível 100 o jogador ficava 970x atrás. `nivel ^ 1,82`
- * acertava o fim da vida e subia rápido demais no começo — o nível 2 já ficava
- * intransponível.
+ * O poder do jogador cresce com expoente 2,12 no nível (medido por ajuste
+ * log-log). Somando 2, o inimigo cresce com 4,12 — e é essa diferença que cria
+ * a parede: até certo nível o jogador vai bem, e a partir dali o inimigo passa
+ * na frente e não há como avançar sem uma camada nova.
  *
- * Amarrado à curva real, o inimigo acompanha qualquer mudança de atributo sem
- * precisar de recalibragem, e a constante passa a significar algo que dá para
- * decidir: quanto a pessoa fica mais forte do começo ao fim de uma vida.
+ * O valor 2 não é enfeite: ele determina quanto cada camada rende. Com
+ * diferença 2, a parede avança com a raiz do ganho por camada — 26,5% mais
+ * fundo a cada renascimento. Diferença menor faria a parede saltar de forma
+ * absurda (camada 10 no nível milhão); maior faria o prestígio render quase
+ * nada.
+ *
+ * O inimigo NÃO escala com a camada. Essa foi a falha da versão anterior: o
+ * jogador ganhava 1,6 por camada e o inimigo 1,45, e como os dois cresciam, a
+ * vantagem composta não tinha onde ser gasta — na camada 35 o conteúdo já era
+ * enfeite. A dificuldade de um nível é fixa; o que a camada muda é até onde se
+ * chega.
  */
-export const DERIVA_DA_VIDA = 0.3;
-
-/**
- * Crescimento do inimigo POR CAMADA de prestígio.
- *
- * Abaixo do ganho do jogador (1,6) de propósito: a razão entre os dois
- * (1,6 / 1,45 ≈ 1,10) é o motor da progressão infinita. Cada renascimento
- * deixa a pessoa ~10% mais adiantada do que na camada anterior, então ela
- * chega mais longe a cada vez em vez de repetir a mesma parede.
- *
- * Igualá-lo a 1,6 tornaria o prestígio decorativo: ganho e dificuldade se
- * cancelariam e renascer não levaria a lugar nenhum.
- */
-export const CRESCIMENTO_INIMIGO_POR_CAMADA = 1.45;
+export const VANTAGEM_DO_INIMIGO = 2;
 
 // ── Offline ──────────────────────────────────────────────────────────────
 

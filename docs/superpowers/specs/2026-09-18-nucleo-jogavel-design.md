@@ -174,14 +174,30 @@ Três escalas aninhadas.
 nível fixo e é escolha permanente *daquela vida*.
 
 **Camada de prestígio** — infinita. Renascer zera nível, classe e equipamento;
-preserva o multiplicador acumulado:
+preserva o multiplicador acumulado (`1,6 ^ camada`).
 
-```
-poderDaCamada(n) = 1,6 ^ n
-```
+O modelo inteiro cabe em três frases, e as três importam:
 
-Camada 20 ≈ 12.000×; camada 50 ≈ 1,6e10. Os inimigos escalam junto, então o
-jogo permanece desafiante — o que cresce é a escala, não a folga.
+1. **A dificuldade de um nível é fixa.** O inimigo do nível 500 é o mesmo na
+   camada 1 e na camada 90.
+2. **O inimigo cresce mais rápido que o jogador ao longo dos níveis**, então
+   existe um nível em que ele passa na frente — a **parede**. Ela não é teto
+   imposto por regra; é onde as duas curvas se cruzam.
+3. **A camada multiplica só o jogador**, e é isso que empurra a parede para
+   mais fundo: 26,5% a cada renascimento (`√1,6`). Camada 10 → nível 2.000;
+   camada 50 → nível 25 milhões.
+
+Progressão infinita é a parede sempre existir e sempre estar mais longe que na
+vida anterior.
+
+A primeira versão fazia o inimigo escalar por camada também, mais devagar que
+o jogador. Parecia razoável e estava errado: a vantagem composta não tinha
+onde ser gasta, e a partir da camada 35 o conteúdo deixava de oferecer
+resistência. Medido pela simulação.
+
+O custo de XP é polinomial (`nivel ^ 2,2`), e não exponencial. Com `1,18 ^ n`
+qualquer nível acima de ~200 era inalcançável por construção, o que fechava a
+porta para a parede avançar.
 
 Balanceamento é tunável: as constantes moram num único módulo
 (`dominio/src/balanceamento.ts`), nunca espalhadas pelo código.
@@ -321,17 +337,10 @@ Isso fecha como jogo que abre e se joga.
   Tank como ofensiva e defesa ao mesmo tempo), e ambos viraram teste de
   regressão.
 
-- **EM ABERTO — a vantagem de prestígio não tem para onde ir.** O jogador ganha
-  1,6 por camada e o inimigo 1,45; a diferença composta cresce sem limite, e a
-  partir da camada 35 ele está 100x acima do conteúdo. Esse mesmo mecanismo é o
-  que faz a progressão nunca parar, então não dá para removê-lo sem tornar o
-  prestígio decorativo.
-
-  Falta a outra metade: algo que **consuma** a vantagem acumulada. No gênero,
-  isso costuma ser o teto de nível subindo a cada camada — o multiplicador leva
-  mais longe em vez de tornar o mesmo trecho trivial. Hoje o teto é fixo em
-  100. É decisão de produto e precisa ser tomada antes do motor de combate,
-  porque define o que "uma camada" contém.
+- **A vantagem de prestígio precisa ter destino.** Resolvido: a camada
+  multiplica só o jogador, e a parede se afasta. Ficou registrado porque a
+  primeira versão errou isto, e o erro não aparece em teste de unidade — só na
+  relação entre duas curvas, ao longo de dezenas de camadas.
 - **Revive só premium** concentra a monetização num ponto de frustração. É
   decisão tomada; o risco é reputacional e de conversão, não técnico. Se algum
   dia for para app da Apple ou Google, progresso bloqueado atrás de pagamento
