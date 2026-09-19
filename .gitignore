@@ -1,0 +1,20 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+
+# Variáveis de ambiente — chave de pagamento e segredo de sessão passam por
+# aqui, e é exatamente o tipo de arquivo que se commita sem querer uma vez só.
+.env
+.env.*
+!.env.exemplo
+
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+.vercel/
+coverage/
+*.tsbuildinfo

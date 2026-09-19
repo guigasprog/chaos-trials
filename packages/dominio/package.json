@@ -1,0 +1,17 @@
+{
+  "name": "@chaos/dominio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./grande": "./src/grande.ts",
+    "./classe": "./src/classe.ts",
+    "./atributos": "./src/atributos.ts",
+    "./balanceamento": "./src/balanceamento.ts"
+  },
+  "scripts": {
+    "teste": "node ../../scripts/testar.mjs",
+    "tipos": "tsc --noEmit"
+  }
+}

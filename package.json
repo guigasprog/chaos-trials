@@ -1,0 +1,21 @@
+{
+  "name": "chaos-trials",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "teste": "npm run teste --workspaces --if-present",
+    "tipos": "npm run tipos --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsx": "^4.23.1",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}
