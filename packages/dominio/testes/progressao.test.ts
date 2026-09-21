@@ -21,6 +21,17 @@ describe("curva de XP", () => {
     }
   });
 
+  it("o limiar é inteiro", () => {
+    // `nivel ** 2.2` é fracionário, e o resto que sobra ao subir de nível
+    // carregava a fração adiante: a ficha mostrou "1641.6686547393138 / 3616".
+    for (const n of [1, 2, 7, 50, 999, 10_000]) {
+      assert.ok(
+        Number.isInteger(xpParaNivel(n)),
+        `nível ${n} rende limiar fracionário: ${xpParaNivel(n)}`,
+      );
+    }
+  });
+
   it("o acumulado é zero no nível 1 e cresce a partir dali", () => {
     assert.equal(paraNumero(xpAcumuladoAte(1)), 0);
     assert.ok(maiorQue(xpAcumuladoAte(100), xpAcumuladoAte(50)));

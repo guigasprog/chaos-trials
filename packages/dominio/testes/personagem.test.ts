@@ -7,6 +7,7 @@ import {
   ganharXp,
   habilidadesDoPersonagem,
   morrer,
+  normalizar,
   type Personagem,
   progredirOffline,
   prontoParaRenascer,
@@ -96,6 +97,21 @@ describe("XP e nível", () => {
 
   it("recusa XP negativo em vez de subtrair em silêncio", () => {
     assert.throws(() => ganharXp(novo(), -10), /negativo/);
+  });
+
+  it("o saldo guardado é sempre inteiro", () => {
+    // Uma fração no saldo não fica escondida: ela sai na ficha por extenso,
+    // "1641.6686547393138 / 3616", que foi como este defeito apareceu.
+    let p = novo();
+    for (let i = 0; i < 40; i++) {
+      p = ganharXp(p, 37.418).personagem;
+      assert.ok(Number.isInteger(p.xp), `depois de ${i + 1} ganhos: ${p.xp}`);
+    }
+  });
+
+  it("personagem gravado com XP fracionário sai inteiro da normalização", () => {
+    const sujo = { ...novo(), xp: 1641.6686547393138 };
+    assert.equal(normalizar(sujo).xp, 1642);
   });
 });
 

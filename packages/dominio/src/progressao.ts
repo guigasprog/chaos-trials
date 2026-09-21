@@ -38,10 +38,18 @@ import { grande, type Grande, potencia, produto } from "./grande.ts";
 
 // ── Nível ────────────────────────────────────────────────────────────────
 
-/** XP para sair do nível `n` para o seguinte. */
+/**
+ * XP para sair do nível `n` para o seguinte.
+ *
+ * Arredondado de propósito. `nivel ** 2.2` é fracionário, e o resto que
+ * sobra ao subir de nível carrega a fração adiante — a ficha chegou a
+ * mostrar "1641.6686547393138 / 3616". XP é contagem, não medida: o número
+ * que o jogador vê e o número que o motor compara têm de ser o mesmo, e
+ * inteiro.
+ */
 export function xpParaNivel(nivel: number): number {
   if (nivel < 1) throw new Error(`nível inválido: ${nivel}`);
-  return XP_BASE * nivel ** EXPOENTE_XP;
+  return Math.round(XP_BASE * nivel ** EXPOENTE_XP);
 }
 
 /**

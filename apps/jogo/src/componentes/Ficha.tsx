@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api, ErroDaApi, type Personagem } from "@/lib/api";
+import { n } from "@/lib/numero";
 import { PALETAS } from "@/lib/vitral";
 import { Vitral } from "./Vitral";
 
@@ -41,6 +42,9 @@ export function Ficha({
   const noTumulo = p.estado === "tumulo";
   const fracaoXp = Math.min(1, p.xp / p.xpDoNivel);
   const rumoAParede = Math.min(1, p.nivel / p.parede);
+  // Abaixo de um terço a vida vira aviso: é a diferença entre entrar numa
+  // luta e entrar num julgamento sem perceber que está machucado.
+  const ferido = p.vida / p.vidaMaxima < 0.35;
 
   return (
     <section className="flex flex-col gap-10">
@@ -49,33 +53,53 @@ export function Ficha({
 
         <div className="flex-1 text-center sm:text-left">
           <p className="rotulo">
-            {noTumulo ? "no túmulo" : `camada ${p.camada}`}
-          </p>
-          <h1 className="titulo mt-2 text-4xl leading-tight sm:text-5xl">{p.nome}</h1>
-          <p className="mt-1 text-[1.05rem]" style={{ color: paleta.brilho }}>
-            {p.classe.nome} · nível {p.nivel}
+            {/* "camada 0" não quer dizer nada para quem acabou de começar; a
+                camada só vira número depois que existiu um renascimento. */}
+            {noTumulo
+              ? "no túmulo"
+              : p.camada === 0
+                ? "primeira vida"
+                : `camada ${p.camada}`}
           </p>
 
-          <dl className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 text-[0.85rem] sm:grid-cols-4">
-            <div>
-              <dt className="rotulo">Vida</dt>
-              <dd className="mt-1">
-                {p.vida} / {p.vidaMaxima}
-              </dd>
+          {/* O nível vira selo em vez de continuar a frase da classe: é o
+              número que o jogador repete em voz alta, e num jogo ele tem
+              forma de medalha, não de texto corrido. */}
+          <div className="mt-2 flex items-center justify-center gap-4 sm:justify-start">
+            <span className="selo-nivel">
+              <span>{p.nivel}</span>
+              <small>nível</small>
+            </span>
+            <div className="min-w-0">
+              <h1 className="titulo text-4xl leading-tight sm:text-5xl">
+                {p.nome}
+              </h1>
+              <p className="mt-1 text-[1.05rem]" style={{ color: paleta.brilho }}>
+                {p.classe.nome}
+              </p>
             </div>
-            <div>
-              <dt className="rotulo">Sucata</dt>
-              <dd className="mt-1">{p.sucata}</dd>
-            </div>
-            <div>
-              <dt className="rotulo">Premium</dt>
-              <dd className="mt-1">{p.premium}</dd>
-            </div>
-            <div>
-              <dt className="rotulo">Mortes</dt>
-              <dd className="mt-1">{p.mortes}</dd>
-            </div>
-          </dl>
+          </div>
+
+          {/* Valor grande, rótulo miúdo — o inverso da lista de definição que
+              estava aqui. De relance se lê o número; a palavra só desempata. */}
+          <ul className="mt-5 flex flex-wrap justify-center gap-2.5 sm:justify-start">
+            <li className={`recurso ${ferido ? "recurso-perigo" : ""}`}>
+              <span className="recurso-valor">{n(p.vida)}</span>
+              <span className="rotulo">/ {n(p.vidaMaxima)} vida</span>
+            </li>
+            <li className="recurso">
+              <span className="recurso-valor">{n(p.sucata)}</span>
+              <span className="rotulo">sucata</span>
+            </li>
+            <li className="recurso recurso-ouro">
+              <span className="recurso-valor">{n(p.premium)}</span>
+              <span className="rotulo">premium</span>
+            </li>
+            <li className="recurso">
+              <span className="recurso-valor">{n(p.mortes)}</span>
+              <span className="rotulo">mortes</span>
+            </li>
+          </ul>
         </div>
       </header>
 
@@ -83,8 +107,8 @@ export function Ficha({
         <div>
           <div className="mb-2 flex items-baseline justify-between">
             <span className="rotulo">Experiência</span>
-            <span className="rotulo">
-              {p.xp} / {p.xpDoNivel}
+            <span className="rotulo tabular-nums">
+              {n(p.xp)} / {n(p.xpDoNivel)}
             </span>
           </div>
           <div className="barra">
@@ -100,7 +124,10 @@ export function Ficha({
               nível {p.nivel} de {p.parede}
             </span>
           </div>
-          <div className="barra">
+          {/* Fina de propósito: a parede é o arco da vida inteira, e com o
+              mesmo corpo da barra de XP as duas competiriam pela atenção
+              a cada batalha — que é quando só uma delas se move. */}
+          <div className="barra barra-fina">
             <div
               style={{ width: `${rumoAParede * 100}%`, background: "var(--color-ouro)" }}
             />
@@ -111,9 +138,9 @@ export function Ficha({
       {p.ausencia && (
         <p className="painel surge p-5 text-[0.88rem] leading-relaxed text-tinta-fraca">
           Enquanto você esteve fora por {p.ausencia.horas}h, seu personagem
-          travou {p.ausencia.batalhas} batalhas e venceu {p.ausencia.vitorias} —
-          ganhando {p.ausencia.xp} de experiência e {p.ausencia.sucata} de
-          sucata.
+          travou {n(p.ausencia.batalhas)} batalhas e venceu{" "}
+          {n(p.ausencia.vitorias)} — ganhando {n(p.ausencia.xp)} de experiência
+          e {n(p.ausencia.sucata)} de sucata.
         </p>
       )}
 
@@ -171,8 +198,8 @@ export function Ficha({
               <p className="text-[0.88rem] leading-relaxed text-tinta-fraca">
                 Daqui o inimigo é mais forte que você, e nenhum nível resolve.
                 Renascer zera o nível e a classe, mantém as moedas, e leva a
-                parede seguinte {Math.round((p.parede * 1.265) / p.parede * 26.5)}%
-                mais longe.
+                parede seguinte para o nível {n(Math.round(p.parede * 1.2649))} —
+                cerca de 26% mais longe.
               </p>
               <ul className="flex flex-wrap gap-3">
                 {[1, 2, 3, 4, 5].map((raiz) => (
@@ -191,7 +218,11 @@ export function Ficha({
           )}
 
           <div className="flex flex-wrap gap-4">
-            <button type="button" onClick={aoAbrirArvore} className="botao">
+            <button
+              type="button"
+              onClick={aoAbrirArvore}
+              className="botao botao-grande"
+            >
               Árvore
               {/* O número no botão, e não só dentro da tela: ponto parado é a
                   coisa mais fácil de esquecer que se tem. */}
@@ -206,7 +237,7 @@ export function Ficha({
               type="button"
               onClick={() => aoLutar("comum")}
               disabled={ocupado}
-              className="botao"
+              className="botao botao-grande"
             >
               Enfrentar uma sombra
             </button>
@@ -225,7 +256,7 @@ export function Ficha({
                 }
               }}
               disabled={ocupado}
-              className="botao botao-perigo"
+              className="botao botao-grande botao-perigo"
             >
               {confirmando
                 ? "Clique de novo — perder é permanente"

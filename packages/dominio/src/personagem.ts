@@ -103,9 +103,15 @@ export function criarPersonagem(dados: {
  * Campo novo em dado já gravado chega `undefined`, e um `undefined` circulando
  * como `Gastos` estoura três camadas adiante, longe da causa. Aqui ele morre
  * na porta de entrada.
+ *
+ * O XP também passa por aqui inteiro: quem jogou antes de `xpParaNivel`
+ * arredondar carrega uma fração gravada, e ela reapareceria na ficha de
+ * quem já estava jogando.
  */
 export function normalizar(p: Personagem): Personagem {
-  return p.gastos ? p : { ...p, gastos: zerar() };
+  const inteiro = Math.round(p.xp);
+  if (p.gastos && p.xp === inteiro) return p;
+  return { ...p, gastos: p.gastos ?? zerar(), xp: inteiro };
 }
 
 /** O que a árvore rende para este personagem, já com o ramo certo. */
@@ -177,7 +183,9 @@ export function ganharXp(p: Personagem, quantidade: number): GanhoDeXp {
   }
 
   let nivel = p.nivel;
-  let xp = p.xp + quantidade;
+  // Inteiro na entrada: um chamador que passe fração contamina o saldo
+  // gravado, e a fração só aparece muito depois, na ficha.
+  let xp = Math.round(p.xp + quantidade);
   let subidos = 0;
 
   while (xp >= xpParaNivel(nivel)) {

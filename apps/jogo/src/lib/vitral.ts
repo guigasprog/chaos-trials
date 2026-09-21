@@ -157,8 +157,15 @@ interface Peca {
   semChumbo?: boolean;
 }
 
-/** A ogiva: dois arcos que se encontram em ponta, como janela de nave. */
-const OGIVA = `M 18 292 L 18 104 A 118 118 0 0 1 100 12 A 118 118 0 0 1 182 104 L 182 292 Z`;
+/**
+ * A ogiva: dois arcos que se encontram em ponta, como janela de nave.
+ *
+ * Exportada porque o inimigo usa a mesma silhueta — a janela dele é esta
+ * quebrada. Redesenhar o arco à mão lá deu duas janelas de alturas
+ * diferentes lado a lado no combate, que é exatamente o que uma constante
+ * compartilhada evita. Vale no `viewBox` 200 × 300.
+ */
+export const OGIVA = `M 18 292 L 18 104 A 118 118 0 0 1 100 12 A 118 118 0 0 1 182 104 L 182 292 Z`;
 
 /* ─────────────────────── as peças ─────────────────────── */
 

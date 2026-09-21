@@ -10,8 +10,9 @@ import {
   type Evento,
   type Resultado,
 } from "@/lib/api";
-import { PALETAS } from "@/lib/vitral";
-import { Vitral } from "./Vitral";
+import { n } from "@/lib/numero";
+import { OGIVA, PALETAS } from "@/lib/vitral";
+import { PROPORCAO, Vitral } from "./Vitral";
 
 /**
  * A tela de combate.
@@ -32,6 +33,9 @@ const NOME_DO_EFEITO: Record<string, string> = {
 
 function narrar(evento: Evento, nomes: Record<string, string>): string | null {
   const quem = (id: unknown) => nomes[String(id)] ?? String(id);
+  // O log é onde mais se lê número, e é onde uma casa decimal do servidor
+  // apareceria primeiro.
+  const val = (v: unknown) => (typeof v === "number" ? n(v) : String(v));
   switch (evento.tipo) {
     case "rodada":
       return `— rodada ${evento.numero} —`;
@@ -39,10 +43,10 @@ function narrar(evento: Evento, nomes: Record<string, string>): string | null {
       return `${quem(evento.quem)} usa ${evento.habilidade}`;
     case "dano":
       return evento.fonte === "efeito"
-        ? `${quem(evento.alvo)} sofre ${evento.valor} do que carrega`
-        : `${quem(evento.alvo)} leva ${evento.valor}${evento.critico ? " — crítico!" : ""}`;
+        ? `${quem(evento.alvo)} sofre ${val(evento.valor)} do que carrega`
+        : `${quem(evento.alvo)} leva ${val(evento.valor)}${evento.critico ? " — crítico!" : ""}`;
     case "cura":
-      return `${quem(evento.alvo)} recupera ${evento.valor}`;
+      return `${quem(evento.alvo)} recupera ${val(evento.valor)}`;
     case "efeito":
       return `${quem(evento.alvo)} fica ${NOME_DO_EFEITO[String(evento.efeito)] ?? evento.efeito}`;
     case "resistiu":
@@ -103,8 +107,17 @@ function Retrato({
           className={`mb-2 flex items-baseline gap-3 ${espelhado ? "flex-row-reverse" : ""}`}
         >
           <span className="titulo text-2xl leading-none">{c.nome}</span>
-          <span className="rotulo">
-            {c.vida} / {c.vidaMaxima}
+          {/* Tabular e do tamanho de número de jogo: a vida é o valor que a
+              pessoa persegue a cada turno, e em versalete miúdo ela some. */}
+          <span
+            className="text-[1.05rem] leading-none tabular-nums"
+            style={{ color: fracao > 0.3 ? "var(--color-tinta)" : "#f0938a" }}
+          >
+            {n(c.vida)}
+            <span className="text-[0.8rem] text-tinta-fraca">
+              {" "}
+              / {n(c.vidaMaxima)}
+            </span>
           </span>
         </div>
         <div className="barra">
@@ -121,7 +134,7 @@ function Retrato({
             className={`mt-2 flex flex-wrap gap-2 ${espelhado ? "justify-end" : ""}`}
           >
             {c.efeitos.map((e, i) => (
-              <li key={`${e.tipo}${i}`} className="rotulo text-ouro">
+              <li key={`${e.tipo}${i}`} className="efeito">
                 {NOME_DO_EFEITO[e.tipo] ?? e.tipo} · {e.rodadas}
               </li>
             ))}
@@ -132,35 +145,75 @@ function Retrato({
   );
 }
 
-/** O inimigo não tem classe, então não tem vitral: tem um selo que se apaga. */
-function SeloDaSombra({ intensidade }: { intensidade: number }) {
+/**
+ * O inimigo não tem classe, então não tem vitral: tem a mesma janela, quebrada.
+ *
+ * Na mesma ogiva e na mesma caixa do `Vitral` (92 × 138) de propósito. Quando
+ * eram um retrato alto e um disco de 104, as duas colunas do combate tinham
+ * alturas diferentes e nada se alinhava — o inimigo flutuava acima do herói.
+ * Além do alinhamento, a forma repetida é o que faz a leitura: é a janela do
+ * herói com o vidro estilhaçado.
+ */
+function SeloDaSombra({
+  intensidade,
+  largura = 92,
+}: {
+  intensidade: number;
+  largura?: number;
+}) {
   return (
-    <svg viewBox="0 0 104 104" width={104} height={104} aria-hidden="true">
+    <svg
+      viewBox="0 0 200 300"
+      width={largura}
+      height={largura * PROPORCAO}
+      aria-hidden="true"
+    >
       <defs>
-        <radialGradient id="sombra" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#c8372b" stopOpacity={0.5 * intensidade} />
-          <stop offset="70%" stopColor="#3d0c0a" stopOpacity={0.35} />
-          <stop offset="100%" stopColor="#0a0810" stopOpacity="0" />
+        <radialGradient id="sombra" cx="50%" cy="55%" r="62%">
+          <stop offset="0%" stopColor="#c8372b" stopOpacity={0.55 * intensidade} />
+          <stop offset="70%" stopColor="#3d0c0a" stopOpacity={0.4} />
+          <stop offset="100%" stopColor="#0a0810" stopOpacity="0.9" />
         </radialGradient>
+        <clipPath id="sombra-ogiva">
+          <path d={OGIVA} />
+        </clipPath>
       </defs>
-      <circle cx="52" cy="52" r="48" fill="url(#sombra)" />
-      {/* Estilhaços, como um vitral quebrado: o oposto exato do herói. */}
-      {Array.from({ length: 9 }, (_, i) => {
-        const a = (i / 9) * Math.PI * 2;
-        const r1 = 16 + (i % 3) * 8;
-        const r2 = 40 + (i % 4) * 4;
-        return (
-          <path
-            key={i}
-            d={`M 52 52 L ${52 + Math.cos(a) * r1} ${52 + Math.sin(a) * r1} L ${52 + Math.cos(a + 0.42) * r2} ${52 + Math.sin(a + 0.42) * r2} Z`}
-            fill="#7d1a16"
-            fillOpacity={0.3 + (i % 3) * 0.16}
-            stroke="#240b08"
-            strokeWidth="1.6"
-          />
-        );
-      })}
-      <circle cx="52" cy="52" r="48" fill="none" stroke="#240b08" strokeWidth="4" />
+
+      <path d={OGIVA} fill="url(#sombra)" />
+
+      {/* Estilhaços, como um vitral quebrado: o oposto exato do herói. Os
+          raios passam da moldura de propósito e o recorte os corta — é
+          assim que o estilhaço encosta no chumbo em vez de parar antes. */}
+      <g clipPath="url(#sombra-ogiva)">
+        {Array.from({ length: 13 }, (_, i) => {
+          const a = (i / 13) * Math.PI * 2 - Math.PI / 2;
+          const r1 = 26 + (i % 3) * 18;
+          const r2 = 200 + (i % 4) * 22;
+          const cx = 100;
+          const cy = 158;
+          return (
+            <path
+              key={i}
+              d={`M ${cx} ${cy} L ${cx + Math.cos(a) * r1} ${cy + Math.sin(a) * r1} L ${cx + Math.cos(a + 0.38) * r2} ${cy + Math.sin(a + 0.38) * r2} Z`}
+              fill="#7d1a16"
+              fillOpacity={0.28 + (i % 3) * 0.16}
+              stroke="#240b08"
+              strokeWidth="3"
+            />
+          );
+        })}
+      </g>
+
+      {/* O chumbo da moldura, nas mesmas espessuras do vitral gerado — a
+          janela do inimigo continua sendo a mesma janela. */}
+      <path d={OGIVA} fill="none" stroke="#240b08" strokeWidth="8" />
+      <path
+        d={OGIVA}
+        fill="none"
+        stroke="#4a1512"
+        strokeWidth="1.6"
+        strokeOpacity="0.7"
+      />
     </svg>
   );
 }
@@ -232,8 +285,9 @@ export function Combate({
 
       <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:gap-8">
         {heroi && <Retrato c={heroi} cor={cor} classe={classe} />}
-        <span className="rotulo shrink-0 self-center sm:pt-12">
-          rodada {estado.rodada}
+        <span className="selo-nivel shrink-0 self-center sm:mt-10">
+          <span>{estado.rodada}</span>
+          <small>rodada</small>
         </span>
         {vilao && (
           <Retrato c={vilao} cor="var(--color-sangue)" classe={null} espelhado />
@@ -276,12 +330,18 @@ export function Combate({
                     onClick={() => agir(h.id)}
                     disabled={!pronta || ocupado}
                     title={h.descricao}
-                    className="botao"
+                    className="acao"
+                    style={{ "--acento": cor } as React.CSSProperties}
                   >
-                    {h.nome}
+                    <span className="acao-nome">{h.nome}</span>
                     {/* A espera aparece no botão apagado em vez de o botão
                         sumir: some, e a pessoa não entende o que perdeu. */}
-                    {espera > 0 && <span className="ml-2 text-tinta-fraca">{espera}</span>}
+                    <span className="acao-espera">
+                      {espera > 0 ? `${espera} rodada${espera > 1 ? "s" : ""}` : "pronta"}
+                    </span>
+                    {/* Depois do texto no DOM de propósito: posicionado no
+                        canto, mas lido por último por leitor de tela. */}
+                    {espera > 0 && <span className="acao-contador">{espera}</span>}
                   </button>
                 </li>
               );

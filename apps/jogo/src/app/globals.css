@@ -353,3 +353,201 @@ body {
     grid-row: auto !important;
   }
 }
+
+/* ══════════════════ Cara de jogo: ficha e combate ══════════════════ */
+/*
+ * A árvore ficou encorpada e as outras duas telas não. Isso lê como duas
+ * interfaces diferentes coladas, e o jogo perde a unidade antes de ganhar
+ * qualquer coisa. O que segue leva o mesmo vocabulário — borda de 2px,
+ * sombra dura, afundar no clique — para a ficha e o combate.
+ */
+
+/* O painel ganha o mesmo volume dos nós: espessura e chão. */
+.painel {
+  border-width: 2px;
+  border-top-color: rgba(240, 203, 132, 0.22);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.45);
+}
+
+/*
+ * A barra passa de fio de 3px a calha de 14px.
+ *
+ * Três pixels servem a um painel de dados; num jogo, a barra de vida é o
+ * objeto que a pessoa olha primeiro e o resto do tempo. Ela precisa de
+ * corpo: fundo afundado por dentro (inset) e um fio de luz no topo do
+ * preenchimento, que é o que faz o líquido parecer volume e não retângulo.
+ */
+.barra {
+  height: 14px;
+  background: rgba(10, 8, 16, 0.85);
+  border: 2px solid var(--color-borda);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+.barra > div {
+  position: relative;
+  height: 100%;
+  transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.barra > div::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.3);
+}
+/* A barra fina continua existindo onde ela é só informação de fundo. */
+.barra-fina {
+  height: 5px;
+  border-width: 1px;
+}
+.barra-fina > div::after {
+  height: 1px;
+}
+
+/*
+ * Ficha de recurso: sucata, premium, vida, mortes.
+ *
+ * Número grande e rótulo pequeno, nesta ordem visual — num jogo o valor é o
+ * que se consulta de relance, e a palavra só desempata. A `<dl>` anterior
+ * fazia o contrário: rótulo grande em versalete e valor miúdo embaixo.
+ */
+.recurso {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border: 2px solid var(--color-borda);
+  border-top-color: rgba(240, 203, 132, 0.3);
+  background: linear-gradient(180deg, rgba(42, 35, 64, 0.5), rgba(12, 9, 20, 0.92));
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.55);
+}
+.recurso-valor {
+  font-family: var(--font-titulo);
+  font-size: 1.35rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tinta);
+}
+.recurso-perigo .recurso-valor { color: #f0938a; }
+.recurso-ouro .recurso-valor { color: var(--color-ouro-claro); }
+
+/*
+ * O selo de nível: o número como emblema, não como texto corrido.
+ *
+ * É o dado que o jogador repete em voz alta ("tô no 27"), e merece a forma
+ * de medalha — losango de borda dourada com o número centrado.
+ */
+.selo-nivel {
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  flex: none;
+  border: 2px solid var(--color-ouro);
+  background: linear-gradient(180deg, rgba(217, 164, 65, 0.16), rgba(12, 9, 20, 0.95));
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.55), inset 0 0 12px rgba(217, 164, 65, 0.18);
+  /* Girado meio grau: o selo perfeitamente alinhado some dentro da grade. */
+  transform: rotate(-1.5deg);
+}
+.selo-nivel > span {
+  font-family: var(--font-titulo);
+  font-size: 1.7rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ouro-claro);
+  transform: rotate(1.5deg);
+}
+.selo-nivel > small {
+  font-size: 0.5rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-tinta-fraca);
+  transform: rotate(1.5deg);
+}
+
+/*
+ * Botão de ação do combate.
+ *
+ * Largura mínima fixa para a barra não dançar quando uma habilidade entra em
+ * recarga, e a recarga como número grande no canto em vez de um dígito
+ * miúdo ao lado do nome: em recarga o botão está apagado, e o que a pessoa
+ * precisa ler dele é quantas rodadas faltam, não como ele se chama.
+ */
+.acao {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 8.5rem;
+  padding: 0.7rem 0.9rem 0.8rem;
+  border: 2px solid var(--color-borda);
+  border-top-color: rgba(240, 203, 132, 0.28);
+  border-left: 4px solid var(--acento, var(--color-borda));
+  background: linear-gradient(180deg, rgba(30, 25, 46, 0.92), rgba(10, 8, 16, 0.96));
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.6);
+  text-align: left;
+  transition: transform 90ms, box-shadow 90ms, border-color 160ms, filter 160ms;
+}
+.acao:not(:disabled):hover {
+  border-color: var(--color-ouro);
+  border-left-color: var(--acento, var(--color-ouro));
+  filter: brightness(1.18);
+}
+.acao:not(:disabled):active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0.6);
+}
+.acao:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.75) brightness(0.55);
+}
+.acao-nome {
+  font-family: var(--font-titulo);
+  font-size: 1.1rem;
+  line-height: 1.1;
+  color: var(--color-tinta);
+}
+.acao-espera {
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-tinta-fraca);
+}
+/* O contador ocupa o canto da peça, grande o bastante para ler de longe. */
+.acao-contador {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.45rem;
+  font-family: var(--font-titulo);
+  font-size: 1.9rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ouro);
+  opacity: 0.5;
+}
+
+/*
+ * O botão que abre uma batalha não pode ter o tamanho do botão que fecha um
+ * painel. Este é o verbo principal da tela e ocupa espaço de verbo principal.
+ */
+.botao-grande {
+  padding: 0.95rem 1.6rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.1em;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.55);
+}
+.botao-grande:not(:disabled):active {
+  transform: translateY(5px);
+}
+
+/* A faixa de efeitos como selos, e não como lista de texto solta. */
+.efeito {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid rgba(217, 164, 65, 0.4);
+  background: rgba(217, 164, 65, 0.1);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-ouro-claro);
+}
