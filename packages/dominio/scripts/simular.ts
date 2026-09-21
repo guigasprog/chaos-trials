@@ -32,6 +32,7 @@ import {
   OFFLINE_RITMO,
   OFFLINE_TETO_HORAS,
   PRECO_REVIVE,
+  VIDA_APOS_RECUAR,
 } from "../src/balanceamento.ts";
 import {
   equilibrio,
@@ -243,12 +244,14 @@ function taxaDeVitoria(
   nivel: number,
   camada: number,
   amostras = 200,
+  /** Com quanta vida o herói entra. Menos de 1 é quem acabou de recuar. */
+  fracaoDeVida = 1,
 ): number {
   const ramo = ramoDe(indiceClasse);
   let vitorias = 0;
 
   for (let i = 0; i < amostras; i++) {
-    const heroi = criarCombatente({
+    const inteiro = criarCombatente({
       id: "heroi",
       nome: "Herói",
       lado: "jogador",
@@ -256,6 +259,13 @@ function taxaDeVitoria(
       atributos: atributosDe(indiceClasse, nivel),
       habilidades: habilidadesDe(ramo, nivel).map((h) => h.id),
     });
+    const heroi =
+      fracaoDeVida === 1
+        ? inteiro
+        : {
+            ...inteiro,
+            vida: Math.max(1, Math.round(inteiro.vidaMaxima * fracaoDeVida)),
+          };
     // O inimigo é o personagem de referência no mesmo nível, temperado pelo
     // fator que a curva de equilíbrio aplica — assim a simulação mede o mesmo
     // confronto que a fórmula descreve.
@@ -308,6 +318,38 @@ for (const c of RAIZES) {
   const taxa = taxaDeVitoria(c.indice, 50, 0);
   console.log(`    ${c.nome.padEnd(10)} ${(taxa * 100).toFixed(0)}%`);
 }
+
+// ── O que sobra depois de recuar ─────────────────────────────────────────
+
+titulo("DEPOIS DE RECUAR — a derrota comum tem saída?");
+
+/*
+ * Derrota comum não mata: é recuo. Isso só funciona enquanto a próxima luta
+ * continua vencível — se não continua, o personagem não morre nem volta, e
+ * fica preso perdendo para sempre.
+ *
+ * Com os 0,35 originais a coluna de 35% dava 11% no nível 10 e ZERO no
+ * nível 3. A tabela existe para que a próxima mexida no número mostre a
+ * consequência antes de alguém jogar.
+ */
+console.log(
+  "  nível".padEnd(9) +
+    "cheia".padEnd(9) +
+    "70%".padEnd(9) +
+    "50%".padEnd(9) +
+    "35%",
+);
+linha();
+for (const nivel of [3, 10, 25, 50]) {
+  const col = (f: number) =>
+    `${(taxaDeVitoria(4, nivel, 0, 200, f) * 100).toFixed(0)}%`.padEnd(9);
+  console.log(
+    `  ${nivel}`.padEnd(9) + col(1) + col(0.7) + col(0.5) + col(0.35).trim(),
+  );
+}
+console.log(
+  `\n  Em uso: ${(VIDA_APOS_RECUAR * 100).toFixed(0)}% da vida máxima ao recuar.`,
+);
 
 titulo("OUTROS NÚMEROS");
 console.log(`

@@ -146,6 +146,23 @@ export const OFFLINE_RITMO = 0.35;
  */
 export const PREMIO_DO_JULGAMENTO = 6;
 
+/**
+ * Com quanta vida o personagem fica depois de recuar de uma batalha comum.
+ *
+ * Era 0,35, escolhido por parecer "um bom susto", e a medição mostrou que
+ * era um poço: com 35% da vida a taxa de vitória cai para 11% no nível 10 e
+ * para ZERO no nível 3 — testadas 60 lutas seguidas sem uma vitória. Como
+ * derrota comum não mata, o personagem não morria nem voltava: ficava preso
+ * perdendo para sempre, e a única saída era abandonar o jogo. Foi como um
+ * personagem chegou ao nível 5 em 45 batalhas onde uma corrida limpa chega
+ * ao 9.
+ *
+ * 0,70 é piso, não desconto acumulado: perder de novo devolve ao mesmo
+ * lugar. Com ele a vitória seguinte fica entre 58% e 77%, então a derrota
+ * custa tempo — que é o que ela deve custar — sem fechar a saída.
+ */
+export const VIDA_APOS_RECUAR = 0.7;
+
 // ── Morte ────────────────────────────────────────────────────────────────
 
 /** Preço do revive em moeda premium. Personagem no túmulo não rende nada e é

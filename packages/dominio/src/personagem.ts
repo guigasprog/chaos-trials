@@ -25,6 +25,7 @@ import {
   OFFLINE_RITMO,
   OFFLINE_TETO_HORAS,
   PRECO_REVIVE,
+  VIDA_APOS_RECUAR,
 } from "./balanceamento.ts";
 import { habilidadesDe } from "./habilidades.ts";
 import {
@@ -354,9 +355,15 @@ export function vidaAposVitoria(p: Personagem): number {
  * A morte permanente continua existindo, e continua sendo permadeath. Ela só
  * passa a acontecer onde a pessoa ESCOLHEU arriscar: no julgamento. É o que o
  * nome do jogo já dizia.
+ *
+ * O quanto sobra está em `VIDA_APOS_RECUAR`, e o número lá tem uma história:
+ * com os 35% originais o personagem não morria nem conseguia voltar.
  */
 export function recuar(p: Personagem): Personagem {
-  return { ...p, vida: Math.max(1, Math.round(vidaMaximaDe(p) * 0.35)) };
+  return {
+    ...p,
+    vida: Math.max(1, Math.round(vidaMaximaDe(p) * VIDA_APOS_RECUAR)),
+  };
 }
 
 export interface RelatorioOffline {
