@@ -3,6 +3,7 @@ import {
   chanceDeCritico,
   iniciativa,
   reducaoDeDano,
+  somar,
   vidaMaxima,
 } from "./atributos.ts";
 import { chance, escolher, sortear, variar } from "./aleatorio.ts";
@@ -117,13 +118,25 @@ export function criarCombatente(dados: {
   bonus?: Bonus;
 }): Combatente {
   const bonus = dados.bonus ?? SEM_BONUS;
-  const maxima = Math.round(vidaMaxima(dados.atributos) * (1 + bonus.vidaPercentual));
+  /*
+   * Os atributos do bônus SOMAM aqui, e este é o único lugar onde isso
+   * precisa acontecer: tudo adiante — dano, crítico, redução, iniciativa e
+   * vida máxima — lê `combatente.atributos`.
+   *
+   * Ficaram sem somar por uma versão inteira. O efeito: os seis nós de
+   * ATRIBUTO da árvore (Vocação, Couro Curtido, Mão Rápida, Fôlego, Coroa,
+   * Raiz Funda) não faziam absolutamente nada — o jogador gastava ponto em
+   * número que ninguém lia. Nenhum teste pegou porque todos conferiam o
+   * OBJETO de bônus, e não o resultado da batalha.
+   */
+  const atributos = somar(dados.atributos, bonus.atributos);
+  const maxima = Math.round(vidaMaxima(atributos) * (1 + bonus.vidaPercentual));
   return {
     id: dados.id,
     nome: dados.nome,
     lado: dados.lado,
     ramo: dados.ramo,
-    atributos: dados.atributos,
+    atributos,
     vida: dados.vida ?? maxima,
     vidaMaxima: maxima,
     efeitos: [],

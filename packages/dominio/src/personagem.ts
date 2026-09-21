@@ -1,4 +1,4 @@
-import { atributosDe, vidaMaxima } from "./atributos.ts";
+import { atributosDe, somar, vidaMaxima } from "./atributos.ts";
 import {
   bonusDe,
   comprar,
@@ -153,8 +153,20 @@ export function habilidadesTotais(p: Personagem): string[] {
   return [...new Set([...doNivel, ...bonusDoPersonagem(p).magias])];
 }
 
+/**
+ * Vida máxima do personagem FORA da batalha.
+ *
+ * Tem de dar o mesmo número que `criarCombatente` dá, e por um tempo não
+ * deu: aqui o bônus da árvore era ignorado, então a ficha mostrava um
+ * máximo e a luta usava outro — e `vidaAposVitoria`, que cura até este
+ * valor, desperdiçava a vida que a árvore tinha comprado.
+ */
 export function vidaMaximaDe(p: Personagem): number {
-  return vidaMaxima(atributosDe(p.classe, p.nivel));
+  const bonus = bonusDoPersonagem(p);
+  return Math.round(
+    vidaMaxima(somar(atributosDe(p.classe, p.nivel), bonus.atributos)) *
+      (1 + bonus.vidaPercentual),
+  );
 }
 
 export function habilidadesDoPersonagem(p: Personagem): string[] {

@@ -13,7 +13,7 @@ import {
   pontosLivres,
   zerar,
 } from "../src/arvore.ts";
-import { ATRIBUTO_DO_RAMO, atributosDe } from "../src/atributos.ts";
+import { ATRIBUTO_DO_RAMO, atributosDe, vidaMaxima } from "../src/atributos.ts";
 import { HABILIDADES, habilidadePorId } from "../src/habilidades.ts";
 import { nivelDaParede } from "../src/progressao.ts";
 import {
@@ -22,6 +22,7 @@ import {
   resolverBatalha,
 } from "../src/batalha.ts";
 import { sementeDe } from "../src/aleatorio.ts";
+import { criarPersonagem, vidaMaximaDe } from "../src/personagem.ts";
 
 /** Compra tudo que der, do topo para baixo, com os pontos de um nível. */
 function gastarTudo(nivel: number): Gastos {
@@ -273,6 +274,73 @@ describe("a árvore muda o combate", () => {
     const { eventos } = duelo(b, sementeDe("sede"));
     const curasNoHeroi = eventos.filter((e) => e.tipo === "cura" && e.alvo === "heroi");
     assert.ok(curasNoHeroi.length > 0, "o roubo de vida nunca curou");
+  });
+
+  it("nó de ATRIBUTO muda o combate — não só o objeto de bônus", () => {
+    /*
+     * Este teste faltava, e a falta custou caro: `bonus.atributos` nunca
+     * era somado ao combatente, então os SEIS nós de atributo da árvore
+     * (Vocação, Couro Curtido, Mão Rápida, Fôlego, Coroa, Raiz Funda) não
+     * faziam nada. O jogador gastava ponto em número que ninguém lia.
+     *
+     * Os testes existentes passavam porque conferiam o OBJETO de bônus.
+     * Conferir o objeto prova que a árvore soma; só a batalha prova que
+     * alguém lê a soma.
+     */
+    let g = zerar();
+    for (let i = 0; i < 10; i++) g = comprar("raiz", 999, g);
+    const forte = bonusDe(g, 4);
+    assert.ok(forte.atributos.forca > 0, "o nó deixou de dar atributo");
+    // Nada de percentual entra aqui: se entrasse, o teste passaria mesmo
+    // com os atributos ignorados de novo.
+    assert.equal(forte.danoPercentual, 0);
+
+    let comAtributo = 0;
+    let sem = 0;
+    for (let s = 0; s < 60; s++) {
+      if (duelo(forte, s).batalha.vencedor === "jogador") comAtributo++;
+      if (duelo(undefined, s).batalha.vencedor === "jogador") sem++;
+    }
+    assert.ok(
+      comAtributo > sem,
+      `com atributo venceu ${comAtributo}, sem venceu ${sem} — o bônus de ` +
+        `atributo não chega ao combate`,
+    );
+  });
+
+  it("a vida máxima da ficha é a mesma da batalha", () => {
+    /*
+     * Duas contas para o mesmo número é duas contas que divergem. A ficha
+     * ignorava o bônus, mostrava um máximo e a luta usava outro — e
+     * `vidaAposVitoria`, que cura até este valor, desperdiçava a vida que
+     * a árvore tinha comprado.
+     *
+     * Classe 5 de propósito: `vidaMaxima` só olha VIGOR, e vigor é o
+     * atributo do ramo 5. Com ramo 4 o nó daria força, a vida não mudaria
+     * e o teste passaria com a conta errada dos dois lados.
+     */
+    let g = zerar();
+    for (let i = 0; i < 6; i++) g = comprar("raiz", 999, g);
+    for (let i = 0; i < 4; i++) g = comprar("casco", 999, g);
+
+    const p = {
+      ...criarPersonagem({ id: "x", nome: "X", classeRaiz: 5, agora: 0 }),
+      nivel: 30,
+      gastos: g,
+    };
+    const naBatalha = criarCombatente({
+      id: "heroi",
+      nome: "X",
+      lado: "jogador",
+      ramo: 5,
+      atributos: atributosDe(5, 30),
+      habilidades: ["golpe"],
+      bonus: bonusDe(g, 5),
+    });
+    assert.equal(vidaMaximaDe(p), naBatalha.vidaMaxima);
+    // E o bônus precisa de fato ter mexido na vida, senão os dois lados
+    // podem estar errados em conjunto.
+    assert.ok(naBatalha.vidaMaxima > vidaMaxima(atributosDe(5, 30)));
   });
 
   it("recarga reduzida encurta a espera, com piso de uma rodada", () => {
