@@ -43,7 +43,7 @@ export function Ficha({
   return (
     <section className="flex flex-col gap-10">
       <header className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
-        <Vitral classe={p.classe.indice} tamanho={150} aceso={!noTumulo} />
+        <Vitral classe={p.classe.indice} largura={124} aceso={!noTumulo} />
 
         <div className="flex-1 text-center sm:text-left">
           <p className="rotulo">
@@ -154,7 +154,7 @@ export function Ficha({
                       }
                       className="painel flex flex-col items-center gap-3 p-4 hover:border-ouro"
                     >
-                      <Vitral classe={s.indice} tamanho={84} aceso />
+                      <Vitral classe={s.indice} largura={76} aceso />
                       <span className="titulo text-lg">{s.nome}</span>
                     </button>
                   </li>

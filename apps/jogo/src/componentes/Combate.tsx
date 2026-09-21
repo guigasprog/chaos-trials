@@ -92,7 +92,7 @@ function Retrato({
         }}
       >
         {classe !== null ? (
-          <Vitral classe={classe} tamanho={104} aceso={fracao > 0.35} />
+          <Vitral classe={classe} largura={92} aceso={fracao > 0.35} />
         ) : (
           <SeloDaSombra intensidade={fracao} />
         )}

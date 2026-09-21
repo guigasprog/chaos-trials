@@ -75,7 +75,7 @@ export function Criacao({ aoCriar }: { aoCriar: (p: Personagem) => void }) {
                   ativa ? "border-ouro" : "hover:border-tinta-fraca"
                 }`}
               >
-                <Vitral classe={r.indice} tamanho={116} aceso={ativa} />
+                <Vitral classe={r.indice} largura={112} aceso={ativa} />
                 <span className="titulo text-2xl">{r.nome}</span>
                 <span className="text-[0.78rem] leading-snug text-tinta-fraca">
                   {ESSENCIA[r.indice]}

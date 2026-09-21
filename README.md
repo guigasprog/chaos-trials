@@ -27,10 +27,14 @@ Ainda **não há conta**: autenticação é o sub-projeto 6. Hoje o id do
 personagem fica no navegador e serve de credencial, o que basta para jogar
 localmente e não para expor.
 
-A arte das classes é gerada por procedimento, em SVG: vitral é chumbo e vidro
-colorido, que é exatamente o que SVG expressa. As 45 classes saem do próprio
-índice — paleta pelo ramo raiz, complexidade pela profundidade —, então cada
-uma é única sem 45 ilustrações à mão.
+A arte das classes é gerada por procedimento, em SVG: cada uma é uma **figura
+em janela de catedral** — ogiva, halo, manto em dobras e o instrumento na mão
+—, com o chumbo desenhando o corpo e o vidro colorido preenchendo. Vitral é
+chumbo e vidro, que é exatamente o que SVG expressa.
+
+As 45 saem do próprio índice: paleta pelo ramo raiz, riqueza pela
+profundidade. Cada uma é única sem 45 ilustrações à mão, pesa quilobytes e
+escala em qualquer tamanho.
 
 Também dá para jogar sem tela nenhuma, por HTTP:
 
