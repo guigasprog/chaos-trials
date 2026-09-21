@@ -87,11 +87,19 @@ function Ligacoes({
               y1={pai.linha + 0.5}
               x2={no.coluna + 0.5}
               y2={no.linha + 0.5}
-              stroke={aberta ? acento : "#2a2340"}
-              strokeOpacity={aberta ? 0.7 : 0.55}
-              // Em unidades de célula, porque o viewBox é assim; o SVG
-              // esticado cuida do resto.
-              strokeWidth={aberta ? 0.045 : 0.03}
+              stroke={aberta ? acento : "#3c3356"}
+              strokeOpacity={aberta ? 0.85 : 0.7}
+              /*
+               * Em PIXEIS, não em unidades de célula.
+               *
+               * `non-scaling-stroke` diz que a espessura é medida na tela
+               * final, e não no espaço do viewBox. Com 0,03 "unidade de
+               * célula" escrito aqui, o navegador desenhava três centésimos
+               * de pixel — as ligações existiam no DOM e não apareciam em
+               * lugar nenhum, e a árvore parecia uma grade de cartões
+               * soltos. Foi assim por uma versão inteira.
+               */
+              strokeWidth={aberta ? 3 : 2}
               vectorEffect="non-scaling-stroke"
             />
           );
@@ -196,9 +204,13 @@ export function Arvore({
                   ? `${no.descricao} — ${no.impedimento.detalhe}`
                   : `${no.descricao} — custa ${no.custo}`
               }
-              className={`no-arvore no-${no.tipo} ${comecado ? "no-aceso" : ""} ${
-                cheio ? "no-cheio" : ""
-              }`}
+              /* `no-pode` é o convite: com ponto no bolso e requisito
+                 cumprido, o nó sai do cinza sozinho. Sem isso, oito pontos
+                 para gastar ficavam diante de uma grade inteira apagada, e
+                 nada dizia por onde começar. */
+              className={`no-arvore no-${no.tipo} ${
+                no.podeComprar ? "no-pode" : ""
+              } ${comecado ? "no-aceso" : ""} ${cheio ? "no-cheio" : ""}`}
               style={{ gridColumn: no.coluna + 1, gridRow: no.linha + 1 }}
             >
               <span className="no-sigla">{MARCA[no.tipo]?.sigla}</span>

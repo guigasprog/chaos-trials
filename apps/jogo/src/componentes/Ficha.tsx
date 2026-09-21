@@ -17,13 +17,11 @@ export function Ficha({
   p,
   aoAtualizar,
   aoLutar,
-  aoAbrirArvore,
   ocupado,
 }: {
   p: Personagem;
   aoAtualizar: (p: Personagem) => void;
   aoLutar: (tipo: "comum" | "julgamento") => void;
-  aoAbrirArvore: () => void;
   ocupado: boolean;
 }) {
   const [erro, setErro] = useState<string | null>(null);
@@ -81,23 +79,21 @@ export function Ficha({
           </div>
 
           {/* Valor grande, rótulo miúdo — o inverso da lista de definição que
-              estava aqui. De relance se lê o número; a palavra só desempata. */}
+              estava aqui. De relance se lê o número; a palavra só desempata.
+
+              As moedas saíram daqui: elas vivem na barra do herói, visível em
+              todas as telas. Repetir o mesmo número em dois lugares da mesma
+              tela só cria a dúvida sobre qual dos dois está certo. */}
           <ul className="mt-5 flex flex-wrap justify-center gap-2.5 sm:justify-start">
             <li className={`recurso ${ferido ? "recurso-perigo" : ""}`}>
               <span className="recurso-valor">{n(p.vida)}</span>
               <span className="rotulo">/ {n(p.vidaMaxima)} vida</span>
             </li>
             <li className="recurso">
-              <span className="recurso-valor">{n(p.sucata)}</span>
-              <span className="rotulo">sucata</span>
-            </li>
-            <li className="recurso recurso-ouro">
-              <span className="recurso-valor">{n(p.premium)}</span>
-              <span className="rotulo">premium</span>
-            </li>
-            <li className="recurso">
               <span className="recurso-valor">{n(p.mortes)}</span>
-              <span className="rotulo">mortes</span>
+              <span className="rotulo">
+                {p.mortes === 1 ? "morte" : "mortes"}
+              </span>
             </li>
           </ul>
         </div>
@@ -218,21 +214,8 @@ export function Ficha({
           )}
 
           <div className="flex flex-wrap gap-4">
-            <button
-              type="button"
-              onClick={aoAbrirArvore}
-              className="botao botao-grande"
-            >
-              Árvore
-              {/* O número no botão, e não só dentro da tela: ponto parado é a
-                  coisa mais fácil de esquecer que se tem. */}
-              {p.arvore.pontos > 0 && (
-                <span className="ml-2 font-bold text-ouro">
-                  {p.arvore.pontos}
-                </span>
-              )}
-            </button>
-
+            {/* Só os dois verbos de luta aqui. A árvore mora na barra do
+                herói, onde ela fica ao alcance de qualquer tela. */}
             <button
               type="button"
               onClick={() => aoLutar("comum")}

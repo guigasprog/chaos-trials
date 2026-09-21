@@ -15,6 +15,7 @@ import { Arvore } from "@/componentes/Arvore";
 import { Combate } from "@/componentes/Combate";
 import { Criacao } from "@/componentes/Criacao";
 import { Ficha } from "@/componentes/Ficha";
+import { Hud } from "@/componentes/Hud";
 
 /**
  * O jogo.
@@ -90,8 +91,19 @@ export default function Jogo() {
 
   if (!p) return <Criacao aoCriar={criado} />;
 
+  const emCombate = Boolean(batalha) && !resultado;
+
   return (
-    <main className="mx-auto max-w-3xl px-6 py-14">
+    <main className="mx-auto max-w-4xl px-4 pb-16 sm:px-6">
+      {/* A mesma faixa nas três telas: é o que faz combate, ficha e árvore
+          serem lugares dentro de um jogo em vez de três páginas. */}
+      <Hud
+        p={p}
+        aoAbrirArvore={() => setNaArvore(true)}
+        travado={emCombate || naArvore}
+      />
+
+      <div className="pt-10">
       {erro && (
         <p className="painel mb-8 p-4 text-[0.88rem] text-sangue">{erro}</p>
       )}
@@ -139,15 +151,10 @@ export default function Jogo() {
             </div>
           )}
 
-          <Ficha
-            p={p}
-            aoAtualizar={setP}
-            aoLutar={lutar}
-            aoAbrirArvore={() => setNaArvore(true)}
-            ocupado={ocupado}
-          />
+          <Ficha p={p} aoAtualizar={setP} aoLutar={lutar} ocupado={ocupado} />
         </>
       )}
+      </div>
     </main>
   );
 }
