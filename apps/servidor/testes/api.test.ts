@@ -176,7 +176,7 @@ describe("comum contra julgamento", () => {
     // pago, isso é extração, não dificuldade.
     const fraco: Personagem = {
       id: "fraco", nome: "Fraco", classe: 4, nivel: 1500, xp: 0, camada: 0,
-      estado: "vivo", vida: 5000, visto: AGORA, sucata: 0, premium: 0, mortes: 0,
+      estado: "vivo", vida: 5000, visto: AGORA, sucata: 0, premium: 0, mortes: 0, gastos: {},
     };
     const local = montar([fraco]);
 
@@ -220,7 +220,7 @@ describe("comum contra julgamento", () => {
     const condenado: Personagem = {
       id: "condenado", nome: "Condenado", classe: 4, nivel: 1500, xp: 0,
       camada: 0, estado: "vivo", vida: 5000, visto: AGORA, sucata: 0,
-      premium: 0, mortes: 0,
+      premium: 0, mortes: 0, gastos: {},
     };
     const local = montar([condenado]);
 
@@ -262,6 +262,7 @@ describe("túmulo e revive", () => {
     sucata: 10_000,
     premium: 0,
     mortes: 1,
+      gastos: {},
   });
 
   it("quem está no túmulo não pode lutar", async () => {
@@ -325,6 +326,7 @@ describe("progressão offline", () => {
         sucata: 0,
         premium: 0,
         mortes: 0,
+      gastos: {},
       },
     ]);
     relogio = AGORA + 3 * HORA;
@@ -352,6 +354,7 @@ describe("progressão offline", () => {
         sucata: 0,
         premium: 0,
         mortes: 0,
+      gastos: {},
       },
     ]);
     relogio = AGORA + 3 * HORA;
@@ -378,7 +381,7 @@ describe("renascimento", () => {
       visto: AGORA,
       sucata: 77,
       premium: 0,
-      mortes: 0,
+      mortes: 0, gastos: {},
     };
 
     const cedo = montar([base]);
@@ -438,6 +441,113 @@ describe("origem cruzada", () => {
       },
     });
     assert.ok(r.headers["access-control-allow-headers"]);
+  });
+});
+
+describe("árvore de habilidade", () => {
+  it("o personagem novo tem pontos zerados e nenhum nó comprado", async () => {
+    const p = await criar();
+    assert.equal(p.arvore.pontos, 0, "nível 1 não dá ponto");
+    assert.ok(p.arvore.nos.length > 0);
+    assert.ok(p.arvore.nos.every((no: { comprados: number }) => no.comprados === 0));
+  });
+
+  it("o servidor diz POR QUE cada nó está fechado, já resolvido", async () => {
+    // A tela não recalcula requisito nem ponto: regra duplicada nos dois
+    // lados é regra que diverge.
+    const p = await criar();
+    const fechado = p.arvore.nos.find((n: { podeComprar: boolean }) => !n.podeComprar);
+    assert.ok(fechado.impedimento, "nó fechado sem motivo");
+    assert.ok(["requisito", "pontos", "maximo"].includes(fechado.impedimento.motivo));
+  });
+
+  it("comprar um nó gasta o ponto e aplica o bônus", async () => {
+    const veterano: Personagem = {
+      // `Gume` exige `Vocação` antes; o tronco já comprado é o cenário real.
+      id: "vet", nome: "Vet", classe: 4, nivel: 40, xp: 0, camada: 0,
+      estado: "vivo", vida: 500, visto: AGORA, sucata: 0, premium: 0,
+      mortes: 0, gastos: { raiz: 1 },
+    };
+    const local = montar([veterano]);
+
+    const antes = (await local.inject({ method: "GET", url: "/personagens/vet" })).json();
+    assert.equal(antes.arvore.pontos, 38, "39 do nível menos 1 já gasto");
+
+    const r = await local.inject({
+      method: "POST", url: "/personagens/vet/arvore", payload: { no: "gume" },
+    });
+    assert.equal(r.statusCode, 200, r.body);
+    const p = r.json();
+    assert.equal(p.arvore.pontos, 38 - 2, "o custo do nó não foi descontado");
+    assert.ok(p.arvore.bonus.danoPercentual > 0, "a passiva não virou bônus");
+    await local.close();
+  });
+
+  it("nó de magia aparece na lista de habilidades do personagem", async () => {
+    // Um ponto gasto numa magia que não chega ao combate é um ponto perdido
+    // sem o jogador saber.
+    const veterano: Personagem = {
+      id: "mago", nome: "Mago", classe: 4, nivel: 40, xp: 0, camada: 0,
+      estado: "vivo", vida: 500, visto: AGORA, sucata: 0, premium: 0,
+      mortes: 0, gastos: { raiz: 1, gume: 1 },
+    };
+    const local = montar([veterano]);
+
+    const r = await local.inject({
+      method: "POST", url: "/personagens/mago/arvore", payload: { no: "sangria-no" },
+    });
+    assert.equal(r.statusCode, 200, r.body);
+    const ids = r.json().habilidades.map((h: { id: string }) => h.id);
+    assert.ok(ids.includes("sangria"), `habilidades: ${ids.join(", ")}`);
+    await local.close();
+  });
+
+  it("recusa nó sem requisito, dizendo o que falta", async () => {
+    const veterano: Personagem = {
+      id: "afoito", nome: "Afoito", classe: 4, nivel: 40, xp: 0, camada: 0,
+      estado: "vivo", vida: 500, visto: AGORA, sucata: 0, premium: 0,
+      mortes: 0, gastos: {},
+    };
+    const local = montar([veterano]);
+    const r = await local.inject({
+      method: "POST", url: "/personagens/afoito/arvore", payload: { no: "olho" },
+    });
+    assert.equal(r.statusCode, 400);
+    assert.match(r.json().erro, /precisa de Gume antes/);
+    await local.close();
+  });
+
+  it("renascer zera a árvore", async () => {
+    // O nó do tronco aponta para o atributo DO RAMO, e renascer troca o ramo.
+    const naParede = Math.ceil(nivelDaParede(0));
+    const pronto: Personagem = {
+      id: "renasce", nome: "Renasce", classe: 4, nivel: naParede, xp: 0,
+      camada: 0, estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
+      premium: 0, mortes: 0, gastos: { raiz: 5, gume: 3 },
+    };
+    const local = montar([pronto]);
+    const r = await local.inject({
+      method: "POST", url: "/personagens/renasce/renascer", payload: { classe: 1 },
+    });
+    assert.equal(r.statusCode, 200, r.body);
+    assert.ok(r.json().arvore.nos.every((n: { comprados: number }) => n.comprados === 0));
+    await local.close();
+  });
+
+  it("personagem gravado antes da árvore existir não quebra", async () => {
+    // Campo novo em dado já gravado chega indefinido. O `as` aqui é
+    // deliberado: representa exatamente o que está no arquivo de quem jogou
+    // antes desta versão.
+    const antigo = {
+      id: "velho", nome: "Velho", classe: 4, nivel: 20, xp: 0, camada: 0,
+      estado: "vivo", vida: 300, visto: AGORA, sucata: 5, premium: 0, mortes: 0,
+    } as unknown as Personagem;
+    const local = montar([antigo]);
+
+    const r = await local.inject({ method: "GET", url: "/personagens/velho" });
+    assert.equal(r.statusCode, 200, r.body);
+    assert.equal(r.json().arvore.pontos, 19);
+    await local.close();
   });
 });
 

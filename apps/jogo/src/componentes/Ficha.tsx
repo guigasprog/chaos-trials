@@ -16,11 +16,13 @@ export function Ficha({
   p,
   aoAtualizar,
   aoLutar,
+  aoAbrirArvore,
   ocupado,
 }: {
   p: Personagem;
   aoAtualizar: (p: Personagem) => void;
   aoLutar: (tipo: "comum" | "julgamento") => void;
+  aoAbrirArvore: () => void;
   ocupado: boolean;
 }) {
   const [erro, setErro] = useState<string | null>(null);
@@ -189,6 +191,17 @@ export function Ficha({
           )}
 
           <div className="flex flex-wrap gap-4">
+            <button type="button" onClick={aoAbrirArvore} className="botao">
+              Árvore
+              {/* O número no botão, e não só dentro da tela: ponto parado é a
+                  coisa mais fácil de esquecer que se tem. */}
+              {p.arvore.pontos > 0 && (
+                <span className="ml-2 font-bold text-ouro">
+                  {p.arvore.pontos}
+                </span>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => aoLutar("comum")}

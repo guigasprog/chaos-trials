@@ -1,12 +1,14 @@
 import {
   atributosDe,
   type Batalha,
+  bonusDoPersonagem,
   criarCombatente,
   equilibrio,
   type Evento,
   executarTurno,
   habilidadesDe,
   habilidadesDisponiveis,
+  habilidadesTotais,
   iniciarBatalha,
   type Personagem,
   ramoDe,
@@ -66,8 +68,11 @@ export class Batalhas {
       lado: "jogador",
       ramo,
       atributos: atributosDe(p.classe, p.nivel),
-      habilidades: habilidadesDe(ramo, p.nivel).map((h) => h.id),
+      // As da árvore entram junto: um ponto gasto numa magia que não aparece
+      // no combate é um ponto que o jogador perdeu sem saber.
+      habilidades: habilidadesTotais(p),
       vida: p.vida,
+      bonus: bonusDoPersonagem(p),
     });
 
     const vilao = criarCombatente({

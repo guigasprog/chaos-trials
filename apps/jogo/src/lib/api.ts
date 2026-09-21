@@ -32,6 +32,7 @@ export interface Personagem {
   subclasses: { indice: number; nome: string }[];
   habilidades: { id: string; nome: string; descricao: string; recarga: number }[];
   custoDoRevive: number;
+  arvore: Arvore;
   ausencia?: {
     horas: number;
     batalhas: number;
@@ -40,6 +41,28 @@ export interface Personagem {
     sucata: number;
     morreu: boolean;
   } | null;
+}
+
+export interface NoDaArvore {
+  id: string;
+  nome: string;
+  descricao: string;
+  tipo: "atributo" | "magia" | "passiva";
+  custo: number;
+  graus: number;
+  comprados: number;
+  requer: string[];
+  coluna: number;
+  linha: number;
+  podeComprar: boolean;
+  /** O motivo de estar fechado, já resolvido pelo servidor. */
+  impedimento: { motivo: string; detalhe: string } | null;
+}
+
+export interface Arvore {
+  pontos: number;
+  nos: NoDaArvore[];
+  bonus: Record<string, number | string[]>;
 }
 
 export interface Combatente {
@@ -155,6 +178,12 @@ export const api = {
 
   reviver: (id: string) =>
     pedir<Personagem>(`/personagens/${id}/reviver`, { metodo: "POST" }),
+
+  evoluirArvore: (id: string, no: string) =>
+    pedir<Personagem>(`/personagens/${id}/arvore`, {
+      metodo: "POST",
+      corpo: { no },
+    }),
 };
 
 /**

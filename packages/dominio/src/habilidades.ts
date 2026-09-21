@@ -64,6 +64,14 @@ export interface Habilidade {
   readonly ramos?: readonly Ramo[];
   /** Nível em que fica disponível. */
   readonly nivel: number;
+  /**
+   * Só pela árvore de habilidade, nunca por nível.
+   *
+   * Marcadas aqui em vez de numa lista à parte: quem lê a habilidade precisa
+   * saber de onde ela vem, e uma segunda lista seria mais uma coisa para sair
+   * de sincronia.
+   */
+  readonly porArvore?: boolean;
 }
 
 /**
@@ -155,6 +163,67 @@ export const HABILIDADES: readonly Habilidade[] = [
       { tipo: "limpar", efeito: "veneno" },
     ],
   },
+  // ── Só pela árvore ──────────────────────────────────────────────────
+  {
+    id: "fulgor",
+    nome: "Fulgor",
+    descricao: "Um golpe que atravessa qualquer armadura. Espera muito longa.",
+    alvo: "inimigo",
+    recarga: 7,
+    nivel: 1,
+    porArvore: true,
+    operacoes: [{ tipo: "dano", escala: 3.2, perfurante: true }],
+  },
+  {
+    id: "barreira",
+    nome: "Barreira",
+    descricao: "Endurece por quatro rodadas.",
+    alvo: "proprio",
+    recarga: 6,
+    nivel: 1,
+    porArvore: true,
+    operacoes: [
+      { tipo: "efeito", efeito: "reforco", atributo: "vigor", rodadas: 4, escala: 0.9 },
+    ],
+  },
+  {
+    id: "sangria",
+    nome: "Sangria",
+    descricao: "Corte que não fecha: sangra por cinco rodadas.",
+    alvo: "inimigo",
+    recarga: 5,
+    nivel: 1,
+    porArvore: true,
+    operacoes: [
+      { tipo: "dano", escala: 0.7 },
+      { tipo: "efeito", efeito: "veneno", rodadas: 5, escala: 0.5 },
+    ],
+  },
+  {
+    id: "arroubo",
+    nome: "Arroubo",
+    descricao: "Acelera por três rodadas — mais precisão e mais crítico.",
+    alvo: "proprio",
+    recarga: 6,
+    nivel: 1,
+    porArvore: true,
+    operacoes: [
+      { tipo: "efeito", efeito: "reforco", atributo: "destreza", rodadas: 3, escala: 1.1 },
+    ],
+  },
+  {
+    id: "quebranto",
+    nome: "Quebranto",
+    descricao: "Abate o vigor do alvo por quatro rodadas.",
+    alvo: "inimigo",
+    recarga: 5,
+    nivel: 1,
+    porArvore: true,
+    operacoes: [
+      { tipo: "dano", escala: 0.9 },
+      { tipo: "efeito", efeito: "fraqueza", atributo: "vigor", rodadas: 4, escala: 0.6 },
+    ],
+  },
 ];
 
 const POR_ID = new Map(HABILIDADES.map((h) => [h.id, h]));
@@ -165,10 +234,10 @@ export function habilidadePorId(id: string): Habilidade {
   return h;
 }
 
-/** As que um personagem de dado ramo e nível já possui. */
+/** As que um personagem de dado ramo e nível já possui, sem contar a árvore. */
 export function habilidadesDe(ramo: Ramo, nivel: number): Habilidade[] {
   return HABILIDADES.filter(
-    (h) => h.nivel <= nivel && (!h.ramos || h.ramos.includes(ramo)),
+    (h) => !h.porArvore && h.nivel <= nivel && (!h.ramos || h.ramos.includes(ramo)),
   );
 }
 

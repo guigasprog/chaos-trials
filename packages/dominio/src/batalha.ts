@@ -22,6 +22,7 @@ import {
   habilidadePorId,
   type Operacao,
 } from "./habilidades.ts";
+import { type Bonus, SEM_BONUS } from "./arvore.ts";
 
 /**
  * O motor de combate por turnos.
@@ -48,6 +49,15 @@ export interface Combatente {
   readonly habilidades: readonly string[];
   /** Rodadas restantes de espera, por habilidade. */
   readonly recargas: Readonly<Record<string, number>>;
+  /**
+   * O que a árvore de habilidade rende.
+   *
+   * Aqui dentro, e não aplicado nos atributos antes de montar o combatente,
+   * porque passiva não é atributo: dano percentual, roubo de vida e recarga
+   * reduzida não têm onde caber num número de força, e forçá-los ali
+   * esconderia de onde vieram.
+   */
+  readonly bonus: Bonus;
 }
 
 export type Evento =
@@ -104,8 +114,10 @@ export function criarCombatente(dados: {
   atributos: Atributos;
   habilidades: readonly string[];
   vida?: number;
+  bonus?: Bonus;
 }): Combatente {
-  const maxima = vidaMaxima(dados.atributos);
+  const bonus = dados.bonus ?? SEM_BONUS;
+  const maxima = Math.round(vidaMaxima(dados.atributos) * (1 + bonus.vidaPercentual));
   return {
     id: dados.id,
     nome: dados.nome,
@@ -117,6 +129,7 @@ export function criarCombatente(dados: {
     efeitos: [],
     habilidades: dados.habilidades,
     recargas: {},
+    bonus,
   };
 }
 
@@ -212,16 +225,24 @@ function executarOperacao(
 
       const sorteioCritico = chance(
         passo.semente,
-        chanceDeCritico(atributosAtacante),
+        // Teto mantido: a passiva soma à chance, mas crítico garantido
+        // quebraria o mesmo que destreza infinita quebraria.
+        Math.min(0.75, chanceDeCritico(atributosAtacante) + atacante.bonus.criticoAdicional),
       );
       passo.semente = sorteioCritico.semente;
 
-      let valor = comVariacao.valor;
+      let valor = comVariacao.valor * (1 + atacante.bonus.danoPercentual);
       if (sorteioCritico.acertou) valor *= MULTIPLICADOR_CRITICO;
 
       if (!op.perfurante) {
         const defesa = atributosComEfeitos(alvo.atributos, alvo.efeitos);
-        valor *= 1 - reducaoDeDano(defesa);
+        // Mesma curva de saturação de sempre, com a passiva somada e o teto
+        // em 90%: passar disso deixaria o combate sem fim.
+        const reducao = Math.min(
+          0.9,
+          reducaoDeDano(defesa) + alvo.bonus.reducaoAdicional,
+        );
+        valor *= 1 - reducao;
       }
 
       // Piso de 1: com redução alta, arredondar para baixo daria zero e a
@@ -238,6 +259,23 @@ function executarOperacao(
         fonte: habilidade.id,
       });
       if (vida === 0) passo.eventos.push({ tipo: "morreu", quem: alvoId });
+
+      // Roubo de vida: parte do que se causou volta. Depois do dano, e sobre
+      // o valor que de fato entrou — sobre o bruto, a passiva renderia mais
+      // contra alvo blindado, que é o contrário do que deveria.
+      if (atacante.bonus.roubodeVida > 0) {
+        const cura = Math.round(final * atacante.bonus.roubodeVida);
+        if (cura > 0) {
+          const eu = passo.combatentes[atacante.id];
+          if (eu && vivo(eu)) {
+            const nova = Math.min(eu.vidaMaxima, eu.vida + cura);
+            passo.combatentes[atacante.id] = { ...eu, vida: nova };
+            if (nova > eu.vida) {
+              passo.eventos.push({ tipo: "cura", alvo: eu.id, valor: nova - eu.vida });
+            }
+          }
+        }
+      }
       return;
     }
 
@@ -468,9 +506,12 @@ export function executarTurno(b: Batalha, habilidadeId?: string): Batalha {
         if (escolhida.recarga > 0) {
           const atual = passo.combatentes[atuante.id];
           if (atual) {
+            // Piso de 1 rodada: sem ele, recarga suficiente zeraria a espera e
+            // a habilidade mais forte viraria o ataque básico.
+            const espera = Math.max(1, escolhida.recarga - atual.bonus.recargaReduzida);
             passo.combatentes[atuante.id] = {
               ...atual,
-              recargas: { ...atual.recargas, [escolhida.id]: escolhida.recarga + 1 },
+              recargas: { ...atual.recargas, [escolhida.id]: espera + 1 },
             };
           }
         }

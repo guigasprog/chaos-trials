@@ -1,16 +1,23 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import {
+  ARVORE,
+  bonusDoPersonagem,
   classePorIndice,
   criarPersonagem,
   custoDoRevive,
+  evoluirArvore,
   escolherSubclasse,
   ganharXp,
-  habilidadesDe,
+  habilidadesTotais,
+  habilidadePorId as buscarHabilidade,
   habilidadePorId,
   habilidadesDisponiveis,
   morrer,
   nivelDaParede,
+  normalizar,
+  podeComprar,
+  pontosDisponiveis,
   type Personagem,
   progredirOffline,
   prontoParaRenascer,
@@ -81,13 +88,44 @@ function paraCliente(p: Personagem) {
       const c = classePorIndice(i);
       return { indice: c.indice, nome: c.nome };
     }),
-    habilidades: habilidadesDe(ramo, p.nivel).map((h) => ({
-      id: h.id,
-      nome: h.nome,
-      descricao: h.descricao,
-      recarga: h.recarga,
-    })),
+    habilidades: habilidadesTotais(p).map((id) => {
+      const h = buscarHabilidade(id);
+      return { id: h.id, nome: h.nome, descricao: h.descricao, recarga: h.recarga };
+    }),
     custoDoRevive: custoDoRevive(),
+    arvore: arvoreParaCliente(p),
+  };
+}
+
+/**
+ * A árvore como a tela precisa dela.
+ *
+ * O servidor manda o motivo de cada nó estar fechado, já resolvido. Deixar a
+ * tela recalcular requisito e ponto seria duplicar regra nos dois lados — e
+ * quando duplicada, ela diverge.
+ */
+function arvoreParaCliente(p: Personagem) {
+  const gastos = p.gastos ?? {};
+  return {
+    pontos: pontosDisponiveis(p),
+    nos: ARVORE.map((no) => {
+      const impede = podeComprar(no.id, p.nivel, gastos);
+      return {
+        id: no.id,
+        nome: no.nome,
+        descricao: no.descricao,
+        tipo: no.tipo,
+        custo: no.custo,
+        graus: no.graus,
+        comprados: gastos[no.id] ?? 0,
+        requer: no.requer,
+        coluna: no.coluna,
+        linha: no.linha,
+        podeComprar: impede === null,
+        impedimento: impede ? { motivo: impede.motivo, detalhe: impede.detalhe } : null,
+      };
+    }),
+    bonus: bonusDoPersonagem(p),
   };
 }
 
@@ -120,8 +158,10 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
    * "quando a ausência foi creditada" viraria negociável.
    */
   async function carregar(id: string) {
-    const guardado = await armazenamento.buscar(id);
-    if (!guardado) return null;
+    const bruto = await armazenamento.buscar(id);
+    if (!bruto) return null;
+    // Campo novo em dado já gravado chega indefinido; morre aqui, na porta.
+    const guardado = normalizar(bruto);
 
     const relatorio = progredirOffline(guardado, agora());
     if (relatorio.batalhas > 0 || relatorio.personagem.visto !== guardado.visto) {
@@ -303,6 +343,18 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       personagem: paraCliente(atualizado),
     };
   }
+
+  app.post("/personagens/:id/arvore", async (pedido, resposta) => {
+    const { id } = pedido.params as { id: string };
+    const corpo = pedido.body as { no?: string };
+    const carregado = await carregar(id);
+    if (!carregado) return resposta.status(404).send({ erro: "personagem não encontrado" });
+    if (!corpo?.no) return resposta.status(400).send({ erro: "diga qual nó" });
+
+    const atualizado = evoluirArvore(carregado.personagem, corpo.no);
+    await armazenamento.salvar(atualizado);
+    return paraCliente(atualizado);
+  });
 
   app.post("/personagens/:id/subclasse", async (pedido, resposta) => {
     const { id } = pedido.params as { id: string };

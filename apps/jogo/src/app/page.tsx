@@ -11,6 +11,7 @@ import {
   type Personagem,
   type Resultado,
 } from "@/lib/api";
+import { Arvore } from "@/componentes/Arvore";
 import { Combate } from "@/componentes/Combate";
 import { Criacao } from "@/componentes/Criacao";
 import { Ficha } from "@/componentes/Ficha";
@@ -26,6 +27,7 @@ export default function Jogo() {
   const [p, setP] = useState<Personagem | null>(null);
   const [batalha, setBatalha] = useState<Batalha | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [naArvore, setNaArvore] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -94,7 +96,9 @@ export default function Jogo() {
         <p className="painel mb-8 p-4 text-[0.88rem] text-sangue">{erro}</p>
       )}
 
-      {batalha && !resultado ? (
+      {naArvore ? (
+        <Arvore p={p} aoAtualizar={setP} aoFechar={() => setNaArvore(false)} />
+      ) : batalha && !resultado ? (
         <Combate
           batalha={batalha}
           ramo={p.classe.ramo}
@@ -135,7 +139,13 @@ export default function Jogo() {
             </div>
           )}
 
-          <Ficha p={p} aoAtualizar={setP} aoLutar={lutar} ocupado={ocupado} />
+          <Ficha
+            p={p}
+            aoAtualizar={setP}
+            aoLutar={lutar}
+            aoAbrirArvore={() => setNaArvore(true)}
+            ocupado={ocupado}
+          />
         </>
       )}
     </main>

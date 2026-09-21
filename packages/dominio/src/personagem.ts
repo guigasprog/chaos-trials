@@ -1,4 +1,12 @@
 import { atributosDe, vidaMaxima } from "./atributos.ts";
+import {
+  bonusDe,
+  comprar,
+  type Gastos,
+  podeComprar,
+  pontosLivres,
+  zerar,
+} from "./arvore.ts";
 import { sementeDe } from "./aleatorio.ts";
 import {
   criarCombatente,
@@ -56,6 +64,8 @@ export interface Personagem {
   readonly premium: number;
   /** Quantas vezes já morreu — o túmulo não apaga a história. */
   readonly mortes: number;
+  /** Graus comprados na árvore de habilidade, por id de nó. */
+  readonly gastos: Gastos;
 }
 
 export function criarPersonagem(dados: {
@@ -83,7 +93,54 @@ export function criarPersonagem(dados: {
     sucata: 0,
     premium: 0,
     mortes: 0,
+    gastos: zerar(),
   };
+}
+
+/**
+ * Preenche o que faltar num personagem vindo do armazenamento.
+ *
+ * Campo novo em dado já gravado chega `undefined`, e um `undefined` circulando
+ * como `Gastos` estoura três camadas adiante, longe da causa. Aqui ele morre
+ * na porta de entrada.
+ */
+export function normalizar(p: Personagem): Personagem {
+  return p.gastos ? p : { ...p, gastos: zerar() };
+}
+
+/** O que a árvore rende para este personagem, já com o ramo certo. */
+export function bonusDoPersonagem(p: Personagem) {
+  return bonusDe(p.gastos ?? {}, ramoDe(p.classe));
+}
+
+export function pontosDisponiveis(p: Personagem): number {
+  return pontosLivres(p.nivel, p.gastos ?? {});
+}
+
+/**
+ * Compra um grau de um nó.
+ *
+ * A mensagem diz o que falta em frase inteira, e não só o detalhe: ela sobe
+ * até a tela como está, e "Vocação" sozinho não explica nada a quem clicou.
+ */
+export function evoluirArvore(p: Personagem, no: string): Personagem {
+  const impede = podeComprar(no, p.nivel, p.gastos ?? {});
+  if (impede) {
+    const frase = {
+      requisito: `precisa de ${impede.detalhe} antes`,
+      pontos: `sem pontos: ${impede.detalhe}`,
+      maximo: `já está no máximo — ${impede.detalhe}`,
+      inexistente: `esse nó não existe: ${impede.detalhe}`,
+    }[impede.motivo];
+    throw new Error(frase);
+  }
+  return { ...p, gastos: comprar(no, p.nivel, p.gastos ?? {}) };
+}
+
+/** As habilidades que o personagem tem: as do nível mais as da árvore. */
+export function habilidadesTotais(p: Personagem): string[] {
+  const doNivel = habilidadesDe(ramoDe(p.classe), p.nivel).map((h) => h.id);
+  return [...new Set([...doNivel, ...bonusDoPersonagem(p).magias])];
 }
 
 export function vidaMaximaDe(p: Personagem): number {
@@ -250,6 +307,10 @@ export function renascer(p: Personagem, classeRaiz: number): Personagem {
     xp: 0,
     camada,
     vida: vidaMaxima(atributosDe(classeRaiz, 1)),
+    // A árvore zera junto: o nó do tronco aponta para o atributo DO RAMO, e
+    // renascer troca o ramo. Mantendo os gastos, uma build montada para força
+    // continuaria rodando num mago.
+    gastos: zerar(),
   };
 }
 
@@ -353,8 +414,9 @@ export function progredirOffline(
       lado: "jogador",
       ramo,
       atributos: atributosDe(atual.classe, atual.nivel),
-      habilidades: habilidadesDe(ramo, atual.nivel).map((h) => h.id),
+      habilidades: habilidadesTotais(atual),
       vida: atual.vida,
+      bonus: bonusDoPersonagem(atual),
     });
 
     const vilao = criarCombatente({
