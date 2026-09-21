@@ -117,7 +117,19 @@ describe("batalha", () => {
       assert.ok(resultado.xp > 0, "vitória sem XP");
       assert.ok(resultado.sucata > 0, "vitória sem sucata");
     } else {
-      assert.equal(resultado.morreu, true);
+      /*
+       * Perder uma batalha COMUM é recuar, não morrer.
+       *
+       * Aqui dizia `assert.equal(resultado.morreu, true)`, contradizendo a
+       * regra que o próprio arquivo testa mais abaixo. Passava quase
+       * sempre porque o id do personagem sai de `Math.random()`, entra na
+       * semente da batalha e o herói de nível 1 costuma vencer — o teste
+       * falhava uma vez a cada tantas execuções, sem ninguém mexer em
+       * nada. Teste instável não é ruído: é uma afirmação errada esperando
+       * a semente certa.
+       */
+      assert.equal(resultado.morreu, false, "batalha comum não pode matar");
+      assert.equal(resultado.recuou, true, "derrota comum é recuo");
     }
   });
 

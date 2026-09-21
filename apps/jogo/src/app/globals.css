@@ -697,6 +697,67 @@ body {
   .hud-arvore { padding: 0.4rem 0.5rem; font-size: 0.64rem; gap: 0.3rem; }
 }
 
+/* ══════════════════ O golpe que se sente ══════════════════ */
+/*
+ * O log conta a história depois da luta. Estes dois — o número que sobe e o
+ * tremor de quem apanhou — são o que se sente na hora, e é a diferença
+ * entre uma tabela que muda de valor e uma pancada.
+ */
+.golpe {
+  position: absolute;
+  top: 38%;
+  z-index: 5;
+  pointer-events: none;
+  font-family: var(--font-titulo);
+  font-size: 1.9rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  /*
+   * Placa escura atrás, e não só sombra no texto.
+   *
+   * Com sombra apenas, o "−15" em salmão caiu sobre o vidro vermelho aceso
+   * do herói e sumiu — a medição dizia que o elemento estava no lugar certo
+   * e opaco, e na foto não havia número nenhum. Contraste não se resolve
+   * com contorno quando o fundo é da mesma família de cor.
+   */
+  padding: 0.05rem 0.35rem;
+  background: rgba(8, 6, 14, 0.78);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  animation: subir 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.golpe-dano { color: #ff8a7d; }
+.golpe-cura { color: #8fd6a0; }
+.golpe-critico {
+  color: var(--color-ouro-claro);
+  font-size: 2.7rem;
+  font-weight: 600;
+}
+
+/*
+ * A opacidade fica em 1 até bem tarde.
+ *
+ * Na primeira versão ela caía desde os 18%, e no meio da subida o número já
+ * estava em 0,56 — legível num quadro congelado, quase invisível em
+ * movimento. O que se lê é o tempo em que ele está OPACO, não o tempo em
+ * que ele existe.
+ */
+@keyframes subir {
+  0% { opacity: 0; transform: translateY(14px) scale(0.72); }
+  14% { opacity: 1; transform: translateY(0) scale(1.14); }
+  28% { opacity: 1; transform: translateY(-4px) scale(1); }
+  70% { opacity: 1; transform: translateY(-26px) scale(1); }
+  100% { opacity: 0; transform: translateY(-46px) scale(0.96); }
+}
+
+.tremer { animation: tremor 260ms ease-in-out; }
+@keyframes tremor {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px) rotate(-0.7deg); }
+  45% { transform: translateX(4px) rotate(0.5deg); }
+  70% { transform: translateX(-2px); }
+}
+
 /* A faixa de efeitos como selos, e não como lista de texto solta. */
 .efeito {
   padding: 0.15rem 0.5rem;

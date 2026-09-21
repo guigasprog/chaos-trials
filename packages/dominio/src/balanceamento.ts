@@ -153,13 +153,23 @@ export const PREMIO_DO_JULGAMENTO = 6;
  * era um poço: com 35% da vida a taxa de vitória cai para 11% no nível 10 e
  * para ZERO no nível 3 — testadas 60 lutas seguidas sem uma vitória. Como
  * derrota comum não mata, o personagem não morria nem voltava: ficava preso
- * perdendo para sempre, e a única saída era abandonar o jogo. Foi como um
- * personagem chegou ao nível 5 em 45 batalhas onde uma corrida limpa chega
- * ao 9.
+ * perdendo para sempre, e a única saída era abandonar o jogo.
  *
  * 0,70 é piso, não desconto acumulado: perder de novo devolve ao mesmo
  * lugar. Com ele a vitória seguinte fica entre 58% e 77%, então a derrota
  * custa tempo — que é o que ela deve custar — sem fechar a saída.
+ *
+ * O EFEITO ESTÁ NA CAUDA, não na mediana, e isso importa para quem for
+ * mexer aqui. Simulando 120 corridas de 45 batalhas com o kit completo:
+ *
+ *              nível mediano   pior nível
+ *   0,35            10              2
+ *   0,70            10              9
+ *
+ * O jogador mediano nunca percebeu diferença. O azarado ficava preso no
+ * nível 2 depois de 45 batalhas. É o formato de um poço: ele não piora a
+ * média, ele prende quem cai. Medir só a mediana teria dito "não muda
+ * nada" — e foi por não medir a cauda que os 0,35 sobreviveram tanto.
  */
 export const VIDA_APOS_RECUAR = 0.7;
 

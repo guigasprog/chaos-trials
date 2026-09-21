@@ -64,6 +64,25 @@ function narrar(evento: Evento, nomes: Record<string, string>): string | null {
   }
 }
 
+/** Um número que sobe sobre um retrato e some. */
+interface Golpe {
+  chave: number;
+  alvo: string;
+  valor: number;
+  tipo: "dano" | "critico" | "cura";
+}
+
+/** Quanto tempo o número fica na tela. Igual à animação em `globals.css`. */
+const GOLPE_MS = 1000;
+
+/**
+ * Chave crescente e global.
+ *
+ * Fora do componente porque o compilador do React não deixa mutar valor
+ * vindo de hook, e porque a unicidade só precisa valer dentro da página.
+ */
+let proximaChave = 0;
+
 /**
  * Um combatente como retrato: a peça de vitral, o nome e a vida.
  *
@@ -75,21 +94,25 @@ function Retrato({
   cor,
   classe,
   espelhado = false,
+  golpes = [],
 }: {
   c: Combatente;
   cor: string;
   classe: number | null;
   espelhado?: boolean;
+  /** Os números que sobem por cima deste combatente agora. */
+  golpes?: Golpe[];
 }) {
   const fracao = Math.max(0, c.vida / c.vidaMaxima);
   const caido = c.vida <= 0;
+  const apanhando = golpes.some((g) => g.tipo !== "cura");
 
   return (
     <div
       className={`flex flex-1 flex-col gap-3 ${espelhado ? "items-end text-right" : "items-start"}`}
     >
       <div
-        className="transition-all duration-500"
+        className={`relative transition-all duration-500 ${apanhando ? "tremer" : ""}`}
         style={{
           opacity: caido ? 0.2 : 0.35 + fracao * 0.65,
           filter: caido ? "grayscale(1)" : `saturate(${0.5 + fracao * 0.8})`,
@@ -100,6 +123,24 @@ function Retrato({
         ) : (
           <SeloDaSombra intensidade={fracao} />
         )}
+
+        {/* Os números sobem sobre o retrato, e não no log.
+            O log conta a história depois; isto é o que se sente na hora, e é
+            a diferença entre uma tabela que muda de valor e uma pancada. */}
+        {golpes.map((g, i) => (
+          <span
+            key={g.chave}
+            className={`golpe golpe-${g.tipo}`}
+            style={{
+              // Escalonados: dois números no mesmo pixel viram um borrão.
+              left: `${28 + ((i * 37) % 44)}%`,
+              animationDelay: `${i * 90}ms`,
+            }}
+          >
+            {g.tipo === "cura" ? "+" : "−"}
+            {n(g.valor)}
+          </span>
+        ))}
       </div>
 
       <div className="w-full">
@@ -231,6 +272,7 @@ export function Combate({
 }) {
   const [estado, setEstado] = useState<EstadoDaBatalha>(batalha.estado);
   const [registro, setRegistro] = useState<string[]>([]);
+  const [golpes, setGolpes] = useState<Golpe[]>([]);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const fim = useRef<HTMLDivElement>(null);
@@ -244,6 +286,39 @@ export function Combate({
   function registrar(eventos: Evento[]) {
     const frases = eventos.map((e) => narrar(e, nomes)).filter(Boolean) as string[];
     if (frases.length > 0) setRegistro((antes) => [...antes, ...frases]);
+    mostrarGolpes(eventos);
+  }
+
+  /**
+   * Os números que sobem sobre os retratos.
+   *
+   * Saem dos mesmos eventos que viram frase no log — nada de novo é pedido
+   * ao servidor. Somem sozinhos depois de `GOLPE_MS`; o `setTimeout` limpa
+   * pela chave, e não por índice, porque outra leva pode chegar antes desta
+   * terminar.
+   */
+  function mostrarGolpes(eventos: Evento[]) {
+    const novos = eventos.flatMap<Golpe>((e) => {
+      if (e.tipo !== "dano" && e.tipo !== "cura") return [];
+      if (typeof e.valor !== "number" || e.valor <= 0) return [];
+      proximaChave += 1;
+      return [
+        {
+          chave: proximaChave,
+          alvo: String(e.alvo),
+          valor: e.valor,
+          tipo: e.tipo === "cura" ? "cura" : e.critico ? "critico" : "dano",
+        },
+      ];
+    });
+    if (novos.length === 0) return;
+
+    setGolpes((antes) => [...antes, ...novos]);
+    const chaves = new Set(novos.map((g) => g.chave));
+    setTimeout(
+      () => setGolpes((antes) => antes.filter((g) => !chaves.has(g.chave))),
+      GOLPE_MS + novos.length * 90,
+    );
   }
 
   useEffect(() => {
@@ -284,13 +359,26 @@ export function Combate({
       )}
 
       <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:gap-8">
-        {heroi && <Retrato c={heroi} cor={cor} classe={classe} />}
+        {heroi && (
+          <Retrato
+            c={heroi}
+            cor={cor}
+            classe={classe}
+            golpes={golpes.filter((g) => g.alvo === heroi.id)}
+          />
+        )}
         <span className="selo-nivel shrink-0 self-center sm:mt-10">
           <span>{estado.rodada}</span>
           <small>rodada</small>
         </span>
         {vilao && (
-          <Retrato c={vilao} cor="var(--color-sangue)" classe={null} espelhado />
+          <Retrato
+            c={vilao}
+            cor="var(--color-sangue)"
+            classe={null}
+            espelhado
+            golpes={golpes.filter((g) => g.alvo === vilao.id)}
+          />
         )}
       </div>
 

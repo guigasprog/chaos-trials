@@ -8,7 +8,8 @@ import {
   resolverBatalha,
 } from "../src/batalha.ts";
 import { habilidadesDe } from "../src/habilidades.ts";
-import { equilibrio } from "../src/progressao.ts";
+import { recompensaDe } from "../src/personagem.ts";
+import { equilibrio, xpParaNivel } from "../src/progressao.ts";
 
 /**
  * Recuar não pode ser um poço.
@@ -102,4 +103,84 @@ describe("recuar deixa o jogo jogável", () => {
     // que a taxa era exatamente zero.
     assert.ok(taxaDeVitoria(3, VIDA_APOS_RECUAR) > 0.5);
   });
+
+  it("nem a PIOR de 120 corridas fica presa no começo", () => {
+    /*
+     * A taxa de vitória é o mecanismo; isto é a consequência, e é o que a
+     * mediana esconde.
+     *
+     * Com o piso antigo o jogador mediano chegava ao mesmo nível dos dois
+     * jeitos — o azarado é que ficava parado no nível 2 depois de 45
+     * batalhas. Poço não piora a média: prende quem cai.
+     *
+     * 120 CORRIDAS DE 45 BATALHAS, e o tamanho não é folga. Calibrado:
+     *
+     *   corridas × batalhas   pior em 0,35   pior em 0,70
+     *          30 × 30              6              7
+     *          30 × 45              7              9
+     *          60 × 45              7              9
+     *         120 × 45              2              9
+     *
+     * Abaixo disso o defeito NÃO aparece — a cauda é de uma corrida em
+     * cem. As sementes são fixas, então o resultado é reprodutível e não
+     * sorteado. Encolher a amostra para economizar um segundo devolve um
+     * teste que passa com o defeito dentro, que é pior que não ter teste.
+     */
+    let pior = Infinity;
+    for (let corrida = 0; corrida < 120; corrida++) {
+      pior = Math.min(pior, nivelApos(45, corrida));
+    }
+    assert.ok(
+      pior >= 5,
+      `a pior de 120 corridas parou no nível ${pior} depois de 45 batalhas`,
+    );
+  });
 });
+
+/** Uma corrida: vencer cura tudo, perder devolve ao piso de recuo. */
+function nivelApos(batalhas: number, semente: number): number {
+  let nivel = 1;
+  let xp = 0;
+  let fracao = 1;
+
+  for (let i = 0; i < batalhas; i++) {
+    const inteiro = criarCombatente({
+      id: "heroi",
+      nome: "H",
+      lado: "jogador",
+      ramo: 4,
+      atributos: atributosDe(CLASSE, nivel),
+      habilidades: habilidadesDe(CLASSE, nivel).map((h) => h.id),
+    });
+    const { batalha } = resolverBatalha(
+      iniciarBatalha(
+        [
+          { ...inteiro, vida: Math.max(1, Math.round(inteiro.vidaMaxima * fracao)) },
+          criarCombatente({
+            id: "vilao",
+            nome: "V",
+            lado: "inimigo",
+            ramo: 4,
+            atributos: oponente(nivel),
+            habilidades: habilidadesDe(4, nivel)
+              .map((h) => h.id)
+              .filter((h) => h !== "recompor"),
+          }),
+        ],
+        semente * 1000 + i,
+      ),
+    );
+
+    if (batalha.vencedor !== "jogador") {
+      fracao = VIDA_APOS_RECUAR;
+      continue;
+    }
+    fracao = 1;
+    xp += recompensaDe(nivel, true).xp;
+    while (xp >= xpParaNivel(nivel)) {
+      xp -= xpParaNivel(nivel);
+      nivel += 1;
+    }
+  }
+  return nivel;
+}
