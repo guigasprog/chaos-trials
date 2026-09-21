@@ -209,6 +209,33 @@ export const CHANCE_DE_QUEDA_JULGAMENTO = 1;
  */
 export const SORTEIOS_DO_JULGAMENTO = 2;
 
+// ── Mercado ──────────────────────────────────────────────────────────────
+
+/**
+ * A fatia que toda venda destrói.
+ *
+ * É o ÚNICO ralo de moeda do jogo, e sem ralo a economia fechada só
+ * acumula: cada compra com dinheiro real empurra o total para cima e nada
+ * nunca puxa para baixo. 8% é alto o bastante para o ralo existir e baixo
+ * o bastante para revender não ser burrice — acima de ~15%, o jogador
+ * guarda tudo e o mercado seca.
+ */
+export const DIZIMO_DO_MERCADO = 0.08;
+
+/** Piso de preço. Abaixo disso o anúncio custa mais atenção do que vale. */
+export const PRECO_MINIMO = 1;
+
+/**
+ * Teto de preço.
+ *
+ * Contra o anúncio-piada e contra o dedo escorregado: um preço de dez
+ * dígitos na vitrine não vende nada e atrapalha quem está comparando.
+ */
+export const PRECO_MAXIMO = 10_000_000;
+
+/** Quantos anúncios abertos uma conta pode ter ao mesmo tempo. */
+export const ANUNCIOS_POR_CONTA = 10;
+
 // ── Conta e slots ────────────────────────────────────────────────────────
 
 /**

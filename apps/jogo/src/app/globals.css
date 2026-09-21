@@ -800,6 +800,56 @@ body {
   animation: surgir 460ms cubic-bezier(0.16, 1, 0.3, 1) both 180ms;
 }
 
+/* ══════════════════ Mercado ══════════════════ */
+
+.aba {
+  padding: 0.45rem 0.9rem;
+  border: 2px solid var(--color-borda);
+  background: rgba(20, 16, 31, 0.6);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: var(--color-tinta-fraca);
+  transition: border-color 160ms, color 160ms, background 160ms;
+}
+.aba:hover { color: var(--color-tinta); }
+.aba-pequena { padding: 0.28rem 0.6rem; font-size: 0.7rem; }
+/* A ativa tem fundo, e não só cor de texto: num grupo de três, só a cor
+   do texto não separa o escolhido do que está apenas em foco. */
+.aba-ativa {
+  border-color: var(--color-ouro);
+  background: rgba(217, 164, 65, 0.14);
+  color: var(--color-ouro-claro);
+}
+
+.anuncio {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 2px solid var(--color-borda);
+  border-left: 5px solid var(--raro);
+  background: linear-gradient(180deg, rgba(30, 25, 46, 0.85), rgba(10, 8, 16, 0.95));
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
+}
+/* Fechado continua na lista: é o extrato do vendedor, não uma vitrine. */
+.anuncio-fechado { filter: grayscale(0.7) brightness(0.7); box-shadow: none; }
+
+.moeda-valor {
+  font-family: var(--font-titulo);
+  font-size: 1.5rem;
+  line-height: 1;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
+  color: var(--color-tinta);
+  white-space: nowrap;
+}
+.moeda-premium { color: var(--color-ouro-claro); }
+
+@media (max-width: 560px) {
+  .anuncio { flex-direction: column; }
+  .anuncio > div:last-child { align-items: flex-start; }
+}
+
 /* ══════════════════ A barra do herói ══════════════════ */
 /*
  * Grudada no topo, em todas as telas. A borda de baixo mais grossa que as

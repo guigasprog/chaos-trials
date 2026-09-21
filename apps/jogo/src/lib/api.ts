@@ -65,6 +65,22 @@ export interface Item {
   viroSucata?: number;
 }
 
+export type Moeda = "sucata" | "premium";
+
+export interface Anuncio {
+  id: string;
+  item: Item;
+  preco: number;
+  moeda: Moeda;
+  estado: "aberto" | "vendido" | "retirado";
+  vendedorNome: string;
+  /** Se este anúncio é da minha conta. Resolvido pelo servidor. */
+  meu: boolean;
+  criadoEm: number;
+  dizimo: number;
+  aoVendedor: number;
+}
+
 export interface Personagem {
   id: string;
   nome: string;
@@ -284,6 +300,31 @@ export const api = {
       metodo: "POST",
       corpo: { item },
     }),
+
+  mercado: (moeda?: Moeda) =>
+    pedir<{ dizimo: number; anuncios: Anuncio[]; meus: Anuncio[] }>(
+      `/mercado${moeda ? `?moeda=${moeda}` : ""}`,
+    ),
+
+  anunciar: (personagem: string, item: string, preco: number, moeda: Moeda) =>
+    pedir<{ anuncio: Anuncio; personagem: Personagem }>("/mercado", {
+      metodo: "POST",
+      corpo: { personagem, item, preco, moeda },
+    }),
+
+  retirarAnuncio: (id: string) =>
+    pedir<{ ok: boolean; personagem: Personagem }>(`/mercado/${id}`, {
+      metodo: "DELETE",
+    }),
+
+  comprarAnuncio: (id: string, personagem: string) =>
+    pedir<{
+      comprou: Item;
+      pagou: number;
+      moeda: Moeda;
+      dizimo: number;
+      personagem: Personagem;
+    }>(`/mercado/${id}/comprar`, { metodo: "POST", corpo: { personagem } }),
 
   evoluirArvore: (id: string, no: string) =>
     pedir<Personagem>(`/personagens/${id}/arvore`, {

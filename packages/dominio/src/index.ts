@@ -16,3 +16,22 @@ export {
 export * from "./arvore.ts";
 export * from "./item.ts";
 export * from "./conta.ts";
+export {
+  type Anuncio,
+  type EstadoDoAnuncio,
+  type Moeda,
+  contaDaVenda,
+  criarAnuncio,
+  marcarRetirado,
+  marcarVendido,
+  podeComprar as podeComprarAnuncio,
+  precoSugerido,
+  precoValido,
+  vitrine,
+} from "./mercado.ts";
+export {
+  ANUNCIOS_POR_CONTA,
+  DIZIMO_DO_MERCADO,
+  PRECO_MAXIMO,
+  PRECO_MINIMO,
+} from "./balanceamento.ts";

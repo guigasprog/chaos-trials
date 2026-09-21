@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { Conta, Personagem } from "@chaos/dominio";
+import type { Anuncio, Conta, Personagem } from "@chaos/dominio";
 
 /**
  * Onde o estado vive.
@@ -26,6 +26,7 @@ export interface Cofre<T> {
 export interface Armazenamento {
   readonly personagens: Cofre<Personagem>;
   readonly contas: Cofre<Conta>;
+  readonly anuncios: Cofre<Anuncio>;
 }
 
 /** Tudo que o cofre precisa saber sobre o que guarda: como tirar o id. */
@@ -141,10 +142,12 @@ export function cofreEmArquivo<T extends ComId>(caminho: string): Cofre<T> {
 export function emMemoria(
   personagens: readonly Personagem[] = [],
   contas: readonly Conta[] = [],
+  anuncios: readonly Anuncio[] = [],
 ): Armazenamento {
   return {
     personagens: cofreEmMemoria(personagens),
     contas: cofreEmMemoria(contas),
+    anuncios: cofreEmMemoria(anuncios),
   };
 }
 
@@ -152,6 +155,7 @@ export function emArquivo(pasta: string): Armazenamento {
   return {
     personagens: cofreEmArquivo(join(pasta, "personagens.json")),
     contas: cofreEmArquivo(join(pasta, "contas.json")),
+    anuncios: cofreEmArquivo(join(pasta, "anuncios.json")),
   };
 }
 

@@ -6,7 +6,18 @@ import Fastify, {
 import cors from "@fastify/cors";
 import {
   adicionarPersonagem,
+  ANUNCIOS_POR_CONTA,
+  type Anuncio,
   ARVORE,
+  contaDaVenda,
+  criarAnuncio,
+  DIZIMO_DO_MERCADO,
+  marcarRetirado,
+  marcarVendido,
+  type Moeda,
+  podeComprarAnuncio,
+  precoValido,
+  vitrine,
   bonusDoPersonagem,
   classePorIndice,
   comprarSlot,
@@ -739,6 +750,266 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     await armazenamento.personagens.salvar(atualizado);
     return paraCliente(atualizado);
   });
+
+  // ── Mercado ────────────────────────────────────────────────────────────
+
+  /**
+   * A vitrine. Aberta a quem tem sessão, e só.
+   *
+   * Sem sessão seria uma lista pública do acervo de todo mundo, o que não
+   * faz mal por si — mas faz o mercado virar um raspador fácil de preço
+   * para bot, e o jogo não ganha nada com isso.
+   */
+  app.get("/mercado", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+
+    const consulta = pedido.query as {
+      moeda?: Moeda;
+      encaixe?: string;
+      raridade?: string;
+    };
+    const todos = await armazenamento.anuncios.listar();
+    const abertos = vitrine(todos, {
+      ...(consulta.moeda ? { moeda: consulta.moeda } : {}),
+      ...(consulta.encaixe ? { encaixe: consulta.encaixe } : {}),
+      ...(consulta.raridade ? { raridade: consulta.raridade } : {}),
+    });
+
+    return {
+      dizimo: DIZIMO_DO_MERCADO,
+      anuncios: abertos.map((a) => anuncioParaCliente(a, conta.id)),
+      /** Os meus, inclusive os já vendidos — é o extrato do vendedor. */
+      meus: todos
+        .filter((a) => a.vendedor === conta.id)
+        .sort((a, b) => b.criadoEm - a.criadoEm)
+        .slice(0, 40)
+        .map((a) => anuncioParaCliente(a, conta.id)),
+    };
+  });
+
+  /**
+   * Anunciar. A peça SAI da mochila agora.
+   *
+   * Em custódia, e não marcada como "à venda" dentro da mochila: enquanto
+   * estivesse lá, daria para anunciar, vestir, desmanchar e ainda receber
+   * pela venda.
+   */
+  app.post("/mercado", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+
+    const corpo = pedido.body as {
+      personagem?: string;
+      item?: string;
+      preco?: number;
+      moeda?: Moeda;
+    };
+    if (!corpo?.personagem || !corpo?.item) {
+      return resposta.status(400).send({ erro: "diga qual personagem e qual peça" });
+    }
+    const impedePreco = precoValido(Number(corpo.preco), corpo.moeda ?? "sucata");
+    if (impedePreco) return resposta.status(400).send({ erro: impedePreco.detalhe });
+
+    const carregado = await meuPersonagem(conta, corpo.personagem, resposta);
+    if (!carregado) return;
+
+    const abertos = (await armazenamento.anuncios.listar()).filter(
+      (a) => a.vendedor === conta.id && a.estado === "aberto",
+    );
+    if (abertos.length >= ANUNCIOS_POR_CONTA) {
+      return resposta.status(409).send({
+        erro: `no máximo ${ANUNCIOS_POR_CONTA} anúncios abertos por conta`,
+      });
+    }
+
+    const item = itemNaMochila(carregado.personagem, corpo.item);
+    if (!item) {
+      return resposta.status(404).send({ erro: "essa peça não está na mochila" });
+    }
+
+    const anuncio = criarAnuncio({
+      id: `an${novoSufixo()}`,
+      vendedor: conta.id,
+      vendedorNome: carregado.personagem.nome,
+      personagem: carregado.personagem.id,
+      item,
+      preco: Number(corpo.preco),
+      moeda: corpo.moeda ?? "sucata",
+      agora: agora(),
+    });
+
+    const semAPeca: Personagem = {
+      ...carregado.personagem,
+      mochila: carregado.personagem.mochila.filter((i) => i.id !== item.id),
+    };
+    // O anúncio primeiro: falhar depois de tirar da mochila apagaria a
+    // peça. Nesta ordem, o pior caso é um anúncio de peça que ainda está
+    // na mochila — e a compra confere a custódia, não a mochila.
+    await armazenamento.anuncios.salvar(anuncio);
+    await armazenamento.personagens.salvar(semAPeca);
+
+    return resposta.status(201).send({
+      anuncio: anuncioParaCliente(anuncio, conta.id),
+      personagem: paraCliente(semAPeca),
+    });
+  });
+
+  /** Retirar. A peça volta para a mochila de quem anunciou. */
+  app.delete("/mercado/:id", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const { id } = pedido.params as { id: string };
+
+    const anuncio = await armazenamento.anuncios.buscar(id);
+    // 404 para o anúncio de outra pessoa, como no personagem: "existe, mas
+    // não é seu" conta a quem chuta ids quais existem.
+    if (!anuncio || anuncio.vendedor !== conta.id) {
+      return resposta.status(404).send({ erro: "anúncio não encontrado" });
+    }
+    if (anuncio.estado !== "aberto") {
+      return resposta.status(409).send({ erro: "este anúncio já foi fechado" });
+    }
+
+    const dono = await carregar(anuncio.personagem);
+    if (!dono) {
+      return resposta.status(409).send({
+        erro: "o personagem que anunciou não existe mais",
+      });
+    }
+    if (dono.personagem.mochila.length >= MOCHILA_MAXIMA) {
+      return resposta.status(409).send({
+        erro: "a mochila está cheia — abra espaço antes de retirar",
+      });
+    }
+
+    await armazenamento.personagens.salvar(
+      guardarItem(dono.personagem, anuncio.item),
+    );
+    await armazenamento.anuncios.salvar(marcarRetirado(anuncio, agora()));
+    return { ok: true, personagem: paraCliente(guardarItem(dono.personagem, anuncio.item)) };
+  });
+
+  /**
+   * Comprar.
+   *
+   * Sucata sai do PERSONAGEM que compra; premium sai da CONTA. É a mesma
+   * divisão do resto do jogo, e é o que impede mover sucata entre
+   * personagens fingindo uma venda.
+   */
+  app.post("/mercado/:id/comprar", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const { id } = pedido.params as { id: string };
+    const corpo = pedido.body as { personagem?: string };
+    if (!corpo?.personagem) {
+      return resposta.status(400).send({ erro: "diga qual personagem recebe" });
+    }
+
+    const anuncio = await armazenamento.anuncios.buscar(id);
+    if (!anuncio) return resposta.status(404).send({ erro: "anúncio não encontrado" });
+
+    const carregado = await meuPersonagem(conta, corpo.personagem, resposta);
+    if (!carregado) return;
+    const comprador = carregado.personagem;
+
+    const saldo = anuncio.moeda === "premium" ? conta.premium : comprador.sucata;
+    const impede = podeComprarAnuncio(anuncio, { conta: conta.id, saldo });
+    if (impede) {
+      return resposta.status(impede.motivo === "estado" ? 409 : 400).send({
+        erro: impede.detalhe,
+      });
+    }
+    if (comprador.mochila.length >= MOCHILA_MAXIMA) {
+      return resposta.status(409).send({
+        erro: "a mochila está cheia — abra espaço antes de comprar",
+      });
+    }
+
+    const vendedorConta = await armazenamento.contas.buscar(anuncio.vendedor);
+    if (!vendedorConta) {
+      return resposta.status(409).send({ erro: "o vendedor não existe mais" });
+    }
+
+    const { dizimo, aoVendedor } = contaDaVenda(anuncio.preco);
+
+    /*
+     * A ordem importa, e o pior caso de cada passo foi escolhido.
+     *
+     * Não há transação: são quatro escritas em cofres separados. Fecho o
+     * anúncio PRIMEIRO, porque fechar duas vezes é impossível — se algo
+     * falhar depois, ninguém compra de novo o mesmo anúncio, e o estrago
+     * é reparável por quem olhar o extrato. Na ordem inversa, uma falha
+     * no meio deixaria o anúncio aberto com a peça já entregue.
+     */
+    await armazenamento.anuncios.salvar(marcarVendido(anuncio, conta.id, agora()));
+
+    if (anuncio.moeda === "premium") {
+      await armazenamento.contas.salvar(debitarPremium(conta, anuncio.preco));
+      if (aoVendedor > 0) {
+        await armazenamento.contas.salvar(
+          creditarPremium(
+            // Relê a conta do vendedor: se vendedor e comprador forem a
+            // mesma conta a compra já teria sido recusada, mas reler é o
+            // hábito que evita escrever por cima de uma versão velha.
+            (await armazenamento.contas.buscar(anuncio.vendedor)) ?? vendedorConta,
+            aoVendedor,
+          ),
+        );
+      }
+    } else {
+      const vendedorPersonagem = await armazenamento.personagens.buscar(
+        anuncio.personagem,
+      );
+      if (vendedorPersonagem) {
+        await armazenamento.personagens.salvar({
+          ...vendedorPersonagem,
+          sucata: vendedorPersonagem.sucata + aoVendedor,
+        });
+      }
+      // Personagem do vendedor apagado: a sucata simplesmente não é paga.
+      // O dízimo já garantia que parte sumiria; aqui some o resto, e
+      // nenhuma moeda é criada — que é a regra que não pode quebrar.
+    }
+
+    const comAPeca = guardarItem(
+      {
+        ...comprador,
+        sucata:
+          anuncio.moeda === "sucata"
+            ? comprador.sucata - anuncio.preco
+            : comprador.sucata,
+      },
+      anuncio.item,
+    );
+    await armazenamento.personagens.salvar(comAPeca);
+
+    return {
+      comprou: itemParaCliente(anuncio.item),
+      pagou: anuncio.preco,
+      moeda: anuncio.moeda,
+      dizimo,
+      personagem: paraCliente(comAPeca),
+    };
+  });
+
+  function anuncioParaCliente(a: Anuncio, quemVe: string) {
+    const { dizimo, aoVendedor } = contaDaVenda(a.preco);
+    return {
+      id: a.id,
+      item: itemParaCliente(a.item),
+      preco: a.preco,
+      moeda: a.moeda,
+      estado: a.estado,
+      vendedorNome: a.vendedorNome,
+      meu: a.vendedor === quemVe,
+      criadoEm: a.criadoEm,
+      // O vendedor precisa ver o que sobra ANTES de anunciar; descobrir o
+      // dízimo depois da venda é a forma mais rápida de perder confiança.
+      dizimo,
+      aoVendedor,
+    };
+  }
 
   // ── Itens ──────────────────────────────────────────────────────────────
 

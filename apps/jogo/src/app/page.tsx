@@ -23,6 +23,7 @@ import { Entrada } from "@/componentes/Entrada";
 import { Ficha } from "@/componentes/Ficha";
 import { Hud } from "@/componentes/Hud";
 import { Itens } from "@/componentes/Itens";
+import { Mercado } from "@/componentes/Mercado";
 import { Slots } from "@/componentes/Slots";
 
 /**
@@ -47,7 +48,9 @@ export default function Jogo() {
   const [batalha, setBatalha] = useState<Batalha | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   /** Qual painel está por cima da ficha. */
-  const [painel, setPainel] = useState<"ficha" | "arvore" | "itens">("ficha");
+  const [painel, setPainel] = useState<
+    "ficha" | "arvore" | "itens" | "mercado"
+  >("ficha");
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -213,6 +216,7 @@ export default function Jogo() {
         conta={conta}
         aoAbrirArvore={() => setPainel("arvore")}
         aoAbrirItens={() => setPainel("itens")}
+        aoAbrirMercado={() => setPainel("mercado")}
         aoTrocar={() => {
           esquecerId();
           setP(null);
@@ -230,6 +234,14 @@ export default function Jogo() {
           <Arvore p={p} aoAtualizar={setP} aoFechar={() => setPainel("ficha")} />
         ) : painel === "itens" ? (
           <Itens p={p} aoAtualizar={setP} aoFechar={() => setPainel("ficha")} />
+        ) : painel === "mercado" ? (
+          <Mercado
+            p={p}
+            conta={conta}
+            aoAtualizar={setP}
+            aoAtualizarConta={() => void recarregar()}
+            aoFechar={() => setPainel("ficha")}
+          />
         ) : batalha && !resultado ? (
           <Combate
             batalha={batalha}
