@@ -91,6 +91,12 @@ import {
   guardarSenha,
 } from "./senhas.ts";
 import { Sessoes, tokenDoCabecalho } from "./sessoes.ts";
+import {
+  chaveDaConta,
+  chaveDoAnuncio,
+  chaveDoPersonagem,
+  Filas,
+} from "./filas.ts";
 
 /**
  * A API.
@@ -246,6 +252,16 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
   const agora = opcoes.agora ?? (() => Date.now());
   const batalhas = new Batalhas();
   const sessoes = opcoes.sessoes ?? new Sessoes();
+  /*
+   * Serializa o ciclo ler → decidir → gravar por personagem, conta e
+   * anúncio.
+   *
+   * O cofre já serializava a GRAVAÇÃO, e isso não bastava: duas compras
+   * simultâneas do mesmo anúncio leram "aberto" antes de qualquer uma
+   * gravar, e as duas seguiram. Medido: as duas responderam 200, a peça
+   * acabou em duas mochilas e o vendedor recebeu duas vezes.
+   */
+  const filas = new Filas();
 
   /** Sufixo de id: aleatório mais tempo, para não colidir nem ordenar mal. */
   const novoSufixo = () =>
@@ -364,6 +380,8 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     ok: true,
     batalhasAtivas: batalhas.ativas,
     sessoesAtivas: sessoes.ativas,
+    /** Chaves com fila em andamento. Se subir e não cair, algo travou. */
+    filasOcupadas: filas.ocupadas,
   }));
 
   /**
@@ -464,12 +482,17 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     const conta = await exigirConta(pedido, resposta);
     if (!conta) return;
 
-    const { pode, motivo } = podeComprarSlot(conta);
-    if (!pode) return resposta.status(409).send({ erro: motivo });
+    return filas.executar(chaveDaConta(conta.id), async () => {
+      const atual = normalizarConta(
+        (await armazenamento.contas.buscar(conta.id)) as Conta,
+      );
+      const { pode, motivo } = podeComprarSlot(atual);
+      if (!pode) return resposta.status(409).send({ erro: motivo });
 
-    const atualizada = comprarSlot(conta);
-    await armazenamento.contas.salvar(atualizada);
-    return { conta: contaParaCliente(atualizada) };
+      const atualizada = comprarSlot(atual);
+      await armazenamento.contas.salvar(atualizada);
+      return { conta: contaParaCliente(atualizada) };
+    });
   });
 
   /** As cinco raízes, para a tela de criação. */
@@ -489,24 +512,32 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     if (typeof corpo?.classe !== "number") {
       return resposta.status(400).send({ erro: "escolha uma classe" });
     }
-    if (slotsLivres(conta) <= 0) {
-      return resposta.status(409).send({
-        erro: `sem slot livre: ${conta.personagens.length} de ${slotsTotais(conta)} ocupados`,
-      });
-    }
+    return filas.executar(chaveDaConta(conta.id), async () => {
+      // Relido sob a trava: duas criações simultâneas veriam o mesmo
+      // "um slot livre" e as duas passariam.
+      const atual = normalizarConta(
+        (await armazenamento.contas.buscar(conta.id)) as Conta,
+      );
+      if (slotsLivres(atual) <= 0) {
+        return resposta.status(409).send({
+          erro: `sem slot livre: ${atual.personagens.length} de ${slotsTotais(atual)} ocupados`,
+        });
+      }
 
-    const p = criarPersonagem({
-      id: `p${novoSufixo()}`,
-      nome,
-      classeRaiz: corpo.classe,
-      agora: agora(),
+      const p = criarPersonagem({
+        id: `p${novoSufixo()}`,
+        nome,
+        classeRaiz: corpo.classe!,
+        agora: agora(),
+      });
+      // A conta primeiro: se gravar o personagem e falhar ao ligá-lo à
+      // conta, ele fica órfão no cofre e ninguém o alcança. Na ordem
+      // inversa, o pior caso é um id na conta sem personagem — que `/eu`
+      // já ignora.
+      await armazenamento.contas.salvar(adicionarPersonagem(atual, p.id));
+      await armazenamento.personagens.salvar(p);
+      return resposta.status(201).send(paraCliente(p));
     });
-    // A conta primeiro: se gravar o personagem e falhar ao ligá-lo à conta,
-    // ele fica órfão no cofre e ninguém o alcança. Na ordem inversa, o pior
-    // caso é um id na conta sem personagem — que `/eu` já ignora.
-    await armazenamento.contas.salvar(adicionarPersonagem(conta, p.id));
-    await armazenamento.personagens.salvar(p);
-    return resposta.status(201).send(paraCliente(p));
   });
 
   /**
@@ -520,13 +551,20 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     const conta = await exigirConta(pedido, resposta);
     if (!conta) return;
     const { id } = pedido.params as { id: string };
-    if (!conta.personagens.includes(id)) {
-      return resposta.status(404).send({ erro: "personagem não encontrado" });
-    }
-
-    await armazenamento.contas.salvar(removerPersonagem(conta, id));
-    await armazenamento.personagens.remover(id);
-    return { ok: true };
+    return filas.executarEm(
+      [chaveDaConta(conta.id), chaveDoPersonagem(id)],
+      async () => {
+        const atual = normalizarConta(
+          (await armazenamento.contas.buscar(conta.id)) as Conta,
+        );
+        if (!atual.personagens.includes(id)) {
+          return resposta.status(404).send({ erro: "personagem não encontrado" });
+        }
+        await armazenamento.contas.salvar(removerPersonagem(atual, id));
+        await armazenamento.personagens.remover(id);
+        return { ok: true };
+      },
+    );
   });
 
   app.get("/personagens/:id", async (pedido, resposta) => {
@@ -611,12 +649,21 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
 
     // Terminou: é aqui que o resultado vira progresso gravado. Antes disso,
     // nada do que aconteceu na batalha toca o personagem.
+    //
+    // A trava é só desta parte: o turno em si mora na memória e é dono
+    // único da sessão, mas gravar o resultado é ler-decidir-gravar sobre o
+    // personagem — e uma compra no mercado pode estar fazendo o mesmo.
     let resultado = null;
     if (sessao.batalha.vencedor) {
-      const guardado = await armazenamento.personagens.buscar(sessao.personagemId);
-      if (guardado) {
-        resultado = await concluir(guardado, sessao);
-      }
+      resultado = await filas.executar(
+        chaveDoPersonagem(sessao.personagemId),
+        async () => {
+          const guardado = await armazenamento.personagens.buscar(
+            sessao.personagemId,
+          );
+          return guardado ? await concluir(guardado, sessao) : null;
+        },
+      );
       batalhas.encerrar(id);
     }
 
@@ -710,13 +757,15 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { no?: string };
-    const carregado = await meuPersonagem(conta, id, resposta);
-    if (!carregado) return;
     if (!corpo?.no) return resposta.status(400).send({ erro: "diga qual nó" });
 
-    const atualizado = evoluirArvore(carregado.personagem, corpo.no);
-    await armazenamento.personagens.salvar(atualizado);
-    return paraCliente(atualizado);
+    return filas.executar(chaveDoPersonagem(id), async () => {
+      const carregado = await meuPersonagem(conta, id, resposta);
+      if (!carregado) return;
+      const atualizado = evoluirArvore(carregado.personagem, corpo.no!);
+      await armazenamento.personagens.salvar(atualizado);
+      return paraCliente(atualizado);
+    });
   });
 
   app.post("/personagens/:id/subclasse", async (pedido, resposta) => {
@@ -724,15 +773,17 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { classe?: number };
-    const carregado = await meuPersonagem(conta, id, resposta);
-    if (!carregado) return;
     if (typeof corpo?.classe !== "number") {
       return resposta.status(400).send({ erro: "escolha uma subclasse" });
     }
 
-    const atualizado = escolherSubclasse(carregado.personagem, corpo.classe);
-    await armazenamento.personagens.salvar(atualizado);
-    return paraCliente(atualizado);
+    return filas.executar(chaveDoPersonagem(id), async () => {
+      const carregado = await meuPersonagem(conta, id, resposta);
+      if (!carregado) return;
+      const atualizado = escolherSubclasse(carregado.personagem, corpo.classe!);
+      await armazenamento.personagens.salvar(atualizado);
+      return paraCliente(atualizado);
+    });
   });
 
   app.post("/personagens/:id/renascer", async (pedido, resposta) => {
@@ -740,15 +791,17 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { classe?: number };
-    const carregado = await meuPersonagem(conta, id, resposta);
-    if (!carregado) return;
     if (typeof corpo?.classe !== "number") {
       return resposta.status(400).send({ erro: "escolha a raiz da vida nova" });
     }
 
-    const atualizado = renascer(carregado.personagem, corpo.classe);
-    await armazenamento.personagens.salvar(atualizado);
-    return paraCliente(atualizado);
+    return filas.executar(chaveDoPersonagem(id), async () => {
+      const carregado = await meuPersonagem(conta, id, resposta);
+      if (!carregado) return;
+      const atualizado = renascer(carregado.personagem, corpo.classe!);
+      await armazenamento.personagens.salvar(atualizado);
+      return paraCliente(atualizado);
+    });
   });
 
   // ── Mercado ────────────────────────────────────────────────────────────
@@ -811,6 +864,25 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     const impedePreco = precoValido(Number(corpo.preco), corpo.moeda ?? "sucata");
     if (impedePreco) return resposta.status(400).send({ erro: impedePreco.detalhe });
 
+    return filas.executarEm(
+      [chaveDoPersonagem(corpo.personagem), chaveDaConta(conta.id)],
+      () => anunciarDentroDaTrava(conta, corpo as AnuncioPedido, resposta),
+    );
+  });
+
+  interface AnuncioPedido {
+    personagem: string;
+    item: string;
+    preco: number;
+    moeda?: Moeda;
+  }
+
+  /** O corpo do anúncio, já com exclusividade sobre a mochila. */
+  async function anunciarDentroDaTrava(
+    conta: Conta,
+    corpo: AnuncioPedido,
+    resposta: FastifyReply,
+  ) {
     const carregado = await meuPersonagem(conta, corpo.personagem, resposta);
     if (!carregado) return;
 
@@ -853,7 +925,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       anuncio: anuncioParaCliente(anuncio, conta.id),
       personagem: paraCliente(semAPeca),
     });
-  });
+  }
 
   /** Retirar. A peça volta para a mochila de quem anunciou. */
   app.delete("/mercado/:id", async (pedido, resposta) => {
@@ -861,33 +933,44 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     if (!conta) return;
     const { id } = pedido.params as { id: string };
 
-    const anuncio = await armazenamento.anuncios.buscar(id);
+    const espiado = await armazenamento.anuncios.buscar(id);
     // 404 para o anúncio de outra pessoa, como no personagem: "existe, mas
     // não é seu" conta a quem chuta ids quais existem.
-    if (!anuncio || anuncio.vendedor !== conta.id) {
+    if (!espiado || espiado.vendedor !== conta.id) {
       return resposta.status(404).send({ erro: "anúncio não encontrado" });
     }
-    if (anuncio.estado !== "aberto") {
-      return resposta.status(409).send({ erro: "este anúncio já foi fechado" });
-    }
 
-    const dono = await carregar(anuncio.personagem);
-    if (!dono) {
-      return resposta.status(409).send({
-        erro: "o personagem que anunciou não existe mais",
-      });
-    }
-    if (dono.personagem.mochila.length >= MOCHILA_MAXIMA) {
-      return resposta.status(409).send({
-        erro: "a mochila está cheia — abra espaço antes de retirar",
-      });
-    }
+    return filas.executarEm(
+      [chaveDoAnuncio(id), chaveDoPersonagem(espiado.personagem)],
+      async () => {
+        // Relido sob a trava: entre a espiada e agora, alguém pode ter
+        // comprado.
+        const anuncio = await armazenamento.anuncios.buscar(id);
+        if (!anuncio || anuncio.vendedor !== conta.id) {
+          return resposta.status(404).send({ erro: "anúncio não encontrado" });
+        }
+        if (anuncio.estado !== "aberto") {
+          return resposta.status(409).send({ erro: "este anúncio já foi fechado" });
+        }
 
-    await armazenamento.personagens.salvar(
-      guardarItem(dono.personagem, anuncio.item),
+        const dono = await carregar(anuncio.personagem);
+        if (!dono) {
+          return resposta.status(409).send({
+            erro: "o personagem que anunciou não existe mais",
+          });
+        }
+        if (dono.personagem.mochila.length >= MOCHILA_MAXIMA) {
+          return resposta.status(409).send({
+            erro: "a mochila está cheia — abra espaço antes de retirar",
+          });
+        }
+
+        const devolvido = guardarItem(dono.personagem, anuncio.item);
+        await armazenamento.personagens.salvar(devolvido);
+        await armazenamento.anuncios.salvar(marcarRetirado(anuncio, agora()));
+        return { ok: true, personagem: paraCliente(devolvido) };
+      },
     );
-    await armazenamento.anuncios.salvar(marcarRetirado(anuncio, agora()));
-    return { ok: true, personagem: paraCliente(guardarItem(dono.personagem, anuncio.item)) };
   });
 
   /**
@@ -906,10 +989,50 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       return resposta.status(400).send({ erro: "diga qual personagem recebe" });
     }
 
+    const espiado = await armazenamento.anuncios.buscar(id);
+    if (!espiado) return resposta.status(404).send({ erro: "anúncio não encontrado" });
+
+    /*
+     * Cinco travas, e nenhuma é excesso: o anúncio, os dois personagens e
+     * as duas contas. Medido sem elas: duas compras simultâneas do mesmo
+     * anúncio responderam 200 as duas, a peça acabou em duas mochilas e o
+     * vendedor recebeu duas vezes. O teste sequencial passava.
+     *
+     * Travar só o anúncio não bastaria: a mochila do comprador também é
+     * mexida por uma batalha terminando ao mesmo tempo.
+     */
+    return filas.executarEm(
+      [
+        chaveDoAnuncio(id),
+        chaveDoPersonagem(corpo.personagem),
+        chaveDoPersonagem(espiado.personagem),
+        chaveDaConta(conta.id),
+        chaveDaConta(espiado.vendedor),
+      ],
+      () => comprarDentroDaTrava(id, conta.id, corpo.personagem!, resposta),
+    );
+  });
+
+  /**
+   * O corpo da compra, já com exclusividade garantida.
+   *
+   * Tudo é relido aqui dentro: o que foi lido antes da trava pode ter
+   * mudado enquanto ela era esperada, e agir sobre leitura velha é
+   * exatamente o defeito que a trava existe para impedir.
+   */
+  async function comprarDentroDaTrava(
+    id: string,
+    contaId: string,
+    personagemId: string,
+    resposta: FastifyReply,
+  ) {
+    const conta = normalizarConta(
+      (await armazenamento.contas.buscar(contaId)) as Conta,
+    );
     const anuncio = await armazenamento.anuncios.buscar(id);
     if (!anuncio) return resposta.status(404).send({ erro: "anúncio não encontrado" });
 
-    const carregado = await meuPersonagem(conta, corpo.personagem, resposta);
+    const carregado = await meuPersonagem(conta, personagemId, resposta);
     if (!carregado) return;
     const comprador = carregado.personagem;
 
@@ -991,7 +1114,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       dizimo,
       personagem: paraCliente(comAPeca),
     };
-  });
+  }
 
   function anuncioParaCliente(a: Anuncio, quemVe: string) {
     const { dizimo, aoVendedor } = contaDaVenda(a.preco);
@@ -1018,13 +1141,15 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { item?: string };
-    const carregado = await meuPersonagem(conta, id, resposta);
-    if (!carregado) return;
     if (!corpo?.item) return resposta.status(400).send({ erro: "diga qual peça" });
 
-    const atualizado = equipar(carregado.personagem, corpo.item);
-    await armazenamento.personagens.salvar(atualizado);
-    return paraCliente(atualizado);
+    return filas.executar(chaveDoPersonagem(id), async () => {
+      const carregado = await meuPersonagem(conta, id, resposta);
+      if (!carregado) return;
+      const atualizado = equipar(carregado.personagem, corpo.item!);
+      await armazenamento.personagens.salvar(atualizado);
+      return paraCliente(atualizado);
+    });
   });
 
   app.post("/personagens/:id/desequipar", async (pedido, resposta) => {
@@ -1032,15 +1157,17 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { encaixe?: Encaixe };
-    const carregado = await meuPersonagem(conta, id, resposta);
-    if (!carregado) return;
     if (!corpo?.encaixe || !ENCAIXES.includes(corpo.encaixe)) {
       return resposta.status(400).send({ erro: "diga qual encaixe" });
     }
 
-    const atualizado = desequipar(carregado.personagem, corpo.encaixe);
-    await armazenamento.personagens.salvar(atualizado);
-    return paraCliente(atualizado);
+    return filas.executar(chaveDoPersonagem(id), async () => {
+      const carregado = await meuPersonagem(conta, id, resposta);
+      if (!carregado) return;
+      const atualizado = desequipar(carregado.personagem, corpo.encaixe!);
+      await armazenamento.personagens.salvar(atualizado);
+      return paraCliente(atualizado);
+    });
   });
 
   /** Desmancha em sucata. Só o que está na mochila: o vestido sai primeiro. */
@@ -1049,16 +1176,18 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { item?: string };
-    const carregado = await meuPersonagem(conta, id, resposta);
-    if (!carregado) return;
     if (!corpo?.item) return resposta.status(400).send({ erro: "diga qual peça" });
-    if (!itemNaMochila(carregado.personagem, corpo.item)) {
-      return resposta.status(404).send({ erro: "essa peça não está na mochila" });
-    }
 
-    const { personagem, sucata } = desmanchar(carregado.personagem, corpo.item);
-    await armazenamento.personagens.salvar(personagem);
-    return { ...paraCliente(personagem), rendeu: sucata };
+    return filas.executar(chaveDoPersonagem(id), async () => {
+      const carregado = await meuPersonagem(conta, id, resposta);
+      if (!carregado) return;
+      if (!itemNaMochila(carregado.personagem, corpo.item!)) {
+        return resposta.status(404).send({ erro: "essa peça não está na mochila" });
+      }
+      const { personagem, sucata } = desmanchar(carregado.personagem, corpo.item!);
+      await armazenamento.personagens.salvar(personagem);
+      return { ...paraCliente(personagem), rendeu: sucata };
+    });
   });
 
   /**
@@ -1073,13 +1202,24 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     const conta = await exigirConta(pedido, resposta);
     if (!conta) return;
     const { id } = pedido.params as { id: string };
-    const carregado = await meuPersonagem(conta, id, resposta);
-    if (!carregado) return;
+    // Duas travas: o revive cobra da conta e cura o personagem. Sem a da
+    // conta, dois revives simultâneos de personagens diferentes pagariam
+    // um preço só.
+    return filas.executarEm(
+      [chaveDoPersonagem(id), chaveDaConta(conta.id)],
+      async () => {
+        const atual = normalizarConta(
+          (await armazenamento.contas.buscar(conta.id)) as Conta,
+        );
+        const carregado = await meuPersonagem(atual, id, resposta);
+        if (!carregado) return;
 
-    const { personagem, pagou } = reviver(carregado.personagem, conta.premium);
-    await armazenamento.contas.salvar(debitarPremium(conta, pagou));
-    await armazenamento.personagens.salvar(personagem);
-    return { ...paraCliente(personagem), pagou };
+        const { personagem, pagou } = reviver(carregado.personagem, atual.premium);
+        await armazenamento.contas.salvar(debitarPremium(atual, pagou));
+        await armazenamento.personagens.salvar(personagem);
+        return { ...paraCliente(personagem), pagou };
+      },
+    );
   });
 
   /**
@@ -1104,9 +1244,14 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       return resposta.status(400).send({ erro: "quantidade inválida" });
     }
 
-    const atualizada = creditarPremium(conta, Math.floor(quantidade));
-    await armazenamento.contas.salvar(atualizada);
-    return { conta: contaParaCliente(atualizada) };
+    return filas.executar(chaveDaConta(conta.id), async () => {
+      const atual = normalizarConta(
+        (await armazenamento.contas.buscar(conta.id)) as Conta,
+      );
+      const atualizada = creditarPremium(atual, Math.floor(quantidade));
+      await armazenamento.contas.salvar(atualizada);
+      return { conta: contaParaCliente(atualizada) };
+    });
   });
 
   function estadoDaBatalha(sessao: ReturnType<Batalhas["iniciar"]>) {

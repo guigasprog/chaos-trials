@@ -42,23 +42,49 @@ type ComId = { readonly id: string };
  */
 export function cofreEmMemoria<T extends ComId>(
   inicial: readonly T[] = [],
+  opcoes: { lento?: boolean } = {},
 ): Cofre<T> {
   const dados = new Map<string, T>(
     inicial.map((v) => [v.id, structuredClone(v)]),
   );
 
+  /*
+   * A pausa que faz o cofre se comportar como um banco de verdade.
+   *
+   * Sem ela, cada operação resolve numa MICROTASK, e microtask não cede
+   * o laço de eventos entre requisições: duas chamadas concorrentes de
+   * `app.inject` rodam uma inteira depois da outra, e a corrida nunca
+   * acontece. Medido com uma sonda: com `setTimeout` a ordem é
+   * "a leu → b leu → a gravou → b gravou"; só com microtasks é
+   * "a leu → a gravou → b leu → b gravou".
+   *
+   * Descobri isso porque três testes de corrida que escrevi passavam com
+   * o defeito dentro. É o mesmo tipo de cegueira do CORS, que vinte
+   * testes de `inject` não pegaram: a bancada não reproduzia a condição.
+   *
+   * Desligado por padrão — os outros duzentos testes não precisam pagar
+   * um tick por operação.
+   */
+  const pausa = opcoes.lento
+    ? () => new Promise<void>((r) => setTimeout(r, 0))
+    : async () => {};
+
   return {
     async buscar(id) {
+      await pausa();
       const v = dados.get(id);
       return v ? structuredClone(v) : null;
     },
     async salvar(v) {
+      await pausa();
       dados.set(v.id, structuredClone(v));
     },
     async remover(id) {
+      await pausa();
       dados.delete(id);
     },
     async listar() {
+      await pausa();
       return [...dados.values()].map((v) => structuredClone(v));
     },
   };
@@ -143,11 +169,14 @@ export function emMemoria(
   personagens: readonly Personagem[] = [],
   contas: readonly Conta[] = [],
   anuncios: readonly Anuncio[] = [],
+  /** `lento: true` faz cada operação ceder o laço — é o que permite a um
+   *  teste reproduzir corrida entre requisições. Ver `cofreEmMemoria`. */
+  opcoes: { lento?: boolean } = {},
 ): Armazenamento {
   return {
-    personagens: cofreEmMemoria(personagens),
-    contas: cofreEmMemoria(contas),
-    anuncios: cofreEmMemoria(anuncios),
+    personagens: cofreEmMemoria(personagens, opcoes),
+    contas: cofreEmMemoria(contas, opcoes),
+    anuncios: cofreEmMemoria(anuncios, opcoes),
   };
 }
 
