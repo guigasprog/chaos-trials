@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, ErroDaApi, type Personagem } from "@/lib/api";
-import { PALETAS } from "@/lib/vitral";
-import { Vitral } from "./Vitral";
+import { PALETAS, vitralComoUrl } from "@/lib/vitral";
 
 /** O que cada raiz é, em uma frase — a escolha precisa significar algo. */
 const ESSENCIA: Record<number, string> = {
@@ -14,9 +13,31 @@ const ESSENCIA: Record<number, string> = {
   5: "Aguenta. O vigor transforma o tempo em arma.",
 };
 
+/** O atributo que o ramo favorece, para a lâmina aberta dizer o porquê. */
+const ATRIBUTO: Record<number, string> = {
+  1: "Intelecto",
+  2: "Presença",
+  3: "Destreza",
+  4: "Força",
+  5: "Vigor",
+};
+
+/**
+ * A escolha da classe como faixa de lâminas inclinadas.
+ *
+ * As cinco se encaixam em vez de ficarem lado a lado: o corte diagonal de uma
+ * é o da vizinha, então a faixa lê como um vitral inteiro repartido, e não
+ * como cinco cartões soltos. Tamanho é o mesmo para todas por construção — a
+ * largura vem do `flex`, não de conteúdo, então nenhuma classe fica maior
+ * porque o texto dela é mais longo.
+ *
+ * O detalhe abre no hover porque cinco descrições abertas ao mesmo tempo
+ * competem entre si; uma de cada vez é leitura, cinco é ruído.
+ */
 export function Criacao({ aoCriar }: { aoCriar: (p: Personagem) => void }) {
   const [raizes, setRaizes] = useState<{ indice: number; nome: string }[]>([]);
   const [classe, setClasse] = useState<number | null>(null);
+  const [sobre, setSobre] = useState<number | null>(null);
   const [nome, setNome] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -41,15 +62,18 @@ export function Criacao({ aoCriar }: { aoCriar: (p: Personagem) => void }) {
   }
 
   const escolhida = raizes.find((r) => r.indice === classe);
+  // Aberta é a que o ponteiro visita; sem ponteiro, a escolhida. No toque não
+  // existe hover, e sem esta segunda regra a faixa ficaria sempre fechada.
+  const aberta = sobre ?? classe;
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-5xl flex-col justify-center px-6 py-16">
-      <header className="surge mb-14 text-center">
+    <main className="mx-auto flex min-h-dvh max-w-[1400px] flex-col justify-center gap-10 px-4 py-12">
+      <header className="surge text-center">
         <p className="rotulo">Chaos Trials</p>
-        <h1 className="titulo mt-4 text-5xl leading-tight sm:text-6xl">
+        <h1 className="titulo mt-3 text-5xl leading-tight sm:text-6xl">
           Escolha o que você é
         </h1>
-        <p className="mx-auto mt-5 max-w-lg text-[0.95rem] leading-relaxed text-tinta-fraca">
+        <p className="mx-auto mt-4 max-w-xl text-[0.95rem] leading-relaxed text-tinta-fraca">
           A raiz decide como você luta. Ela se ramifica em 45 caminhos, e você
           só conhece os seus vivendo até eles. Perder um julgamento é
           permanente.
@@ -62,38 +86,60 @@ export function Criacao({ aoCriar }: { aoCriar: (p: Personagem) => void }) {
         </p>
       )}
 
-      <ul className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        {raizes.map((r, i) => {
-          const ativa = classe === r.indice;
-          return (
-            <li key={r.indice} className="surge" style={{ animationDelay: `${i * 70}ms` }}>
+      {raizes.length > 0 && (
+        <div className="faixa surge" onMouseLeave={() => setSobre(null)}>
+          {raizes.map((r, i) => {
+            const paleta = PALETAS[r.indice as 1];
+            const estaAberta = aberta === r.indice;
+            const escolhidaAqui = classe === r.indice;
+
+            return (
               <button
+                key={r.indice}
                 type="button"
                 onClick={() => setClasse(r.indice)}
-                aria-pressed={ativa}
-                className={`painel flex w-full flex-col items-center gap-4 p-5 transition-colors ${
-                  ativa ? "border-ouro" : "hover:border-tinta-fraca"
+                onMouseEnter={() => setSobre(r.indice)}
+                onFocus={() => setSobre(r.indice)}
+                aria-pressed={escolhidaAqui}
+                className={`lamina ${estaAberta ? "lamina-aberta" : ""} ${
+                  escolhidaAqui ? "lamina-escolhida" : ""
                 }`}
+                style={
+                  {
+                    "--acento": paleta.brilho,
+                    "--fundo": paleta.fundo,
+                    // O `z-index` cresce para a direita, então a borda de luz
+                    // de cada lâmina fica por cima da vizinha, e não por baixo.
+                    zIndex: estaAberta ? 20 : 10 - i,
+                    backgroundImage: `url("${vitralComoUrl(r.indice, 420)}")`,
+                  } as React.CSSProperties
+                }
               >
-                <Vitral classe={r.indice} largura={112} aceso={ativa} />
-                <span className="titulo text-2xl">{r.nome}</span>
-                <span className="text-[0.78rem] leading-snug text-tinta-fraca">
-                  {ESSENCIA[r.indice]}
-                </span>
-                <span
-                  className="rotulo"
-                  style={{ color: ativa ? PALETAS[r.indice as 1].brilho : undefined }}
-                >
-                  {ativa ? "escolhida" : " "}
+                {/* Contra-inclinado: sem isto o texto sairia torto junto com a
+                    lâmina, e o corte diagonal é forte demais para ler assim. */}
+                <span className="lamina-conteudo">
+                  <span className="titulo text-3xl leading-none">{r.nome}</span>
+
+                  <span className="lamina-detalhe">
+                    <span className="rotulo" style={{ color: paleta.brilho }}>
+                      {ATRIBUTO[r.indice]}
+                    </span>
+                    <span className="mt-2 block text-[0.84rem] leading-snug text-tinta">
+                      {ESSENCIA[r.indice]}
+                    </span>
+                    <span className="rotulo mt-4 block">
+                      {escolhidaAqui ? "escolhida" : "clique para escolher"}
+                    </span>
+                  </span>
                 </span>
               </button>
-            </li>
-          );
-        })}
-      </ul>
+            );
+          })}
+        </div>
+      )}
 
       {escolhida && (
-        <div className="surge mx-auto mt-12 flex w-full max-w-md flex-col gap-4">
+        <div className="surge mx-auto flex w-full max-w-md flex-col gap-4">
           <label className="flex flex-col gap-2">
             <span className="rotulo">Seu nome</span>
             <input
