@@ -99,6 +99,13 @@ export interface Personagem {
   subclasses: { indice: number; nome: string }[];
   habilidades: { id: string; nome: string; descricao: string; recarga: number }[];
   custoDoRevive: number;
+  /** A poção, já resolvida pelo servidor: preço, cura e o motivo de não dar. */
+  pocao: {
+    preco: number;
+    cura: number;
+    podeBeber: boolean;
+    impedimento: string | null;
+  };
   arvore: Arvore;
   equipado: Partial<Record<Encaixe, Item>>;
   /** Já ordenada por poder pelo servidor. */
@@ -111,6 +118,9 @@ export interface Personagem {
     xp: number;
     sucata: number;
     morreu: boolean;
+    /** O tempo que sobrou virou descanso, e o quanto ele curou. */
+    horasDescansando: number;
+    vidaRecuperada: number;
   } | null;
 }
 
@@ -282,6 +292,12 @@ export const api = {
 
   reviver: (id: string) =>
     pedir<Personagem>(`/personagens/${id}/reviver`, { metodo: "POST" }),
+
+  beberPocao: (id: string) =>
+    pedir<Personagem & { curou: number; pagou: number }>(
+      `/personagens/${id}/pocao`,
+      { metodo: "POST" },
+    ),
 
   equipar: (id: string, item: string) =>
     pedir<Personagem>(`/personagens/${id}/equipar`, {

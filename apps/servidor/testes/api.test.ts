@@ -253,7 +253,7 @@ describe("comum contra julgamento", () => {
     // pago, isso é extração, não dificuldade.
     const fraco: Personagem = {
       id: "fraco", nome: "Fraco", classe: 4, nivel: 1500, xp: 0, camada: 0,
-      estado: "vivo", vida: 5000, visto: AGORA, sucata: 0, mortes: 0, gastos: {}, equipado: {}, mochila: [],
+      estado: "vivo", vida: 5000, visto: AGORA, sucata: 0, mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
     };
     const local = montar([fraco]);
 
@@ -297,7 +297,7 @@ describe("comum contra julgamento", () => {
     const condenado: Personagem = {
       id: "condenado", nome: "Condenado", classe: 4, nivel: 1500, xp: 0,
       camada: 0, estado: "vivo", vida: 5000, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: {}, equipado: {}, mochila: [],
+      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
     };
     const local = montar([condenado]);
 
@@ -339,7 +339,7 @@ describe("túmulo e revive", () => {
     sucata: 10_000,
     
     mortes: 1,
-      gastos: {}, equipado: {}, mochila: [],
+      gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
   });
 
   it("quem está no túmulo não pode lutar", async () => {
@@ -408,7 +408,7 @@ describe("progressão offline", () => {
         sucata: 0,
         
         mortes: 0,
-      gastos: {}, equipado: {}, mochila: [],
+      gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
       },
     ]);
     relogio = AGORA + 3 * HORA;
@@ -436,7 +436,7 @@ describe("progressão offline", () => {
         sucata: 0,
         
         mortes: 0,
-      gastos: {}, equipado: {}, mochila: [],
+      gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
       },
     ]);
     relogio = AGORA + 3 * HORA;
@@ -463,7 +463,7 @@ describe("renascimento", () => {
       visto: AGORA,
       sucata: 77,
       
-      mortes: 0, gastos: {}, equipado: {}, mochila: [],
+      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
     };
 
     const cedo = montar([base]);
@@ -548,7 +548,7 @@ describe("árvore de habilidade", () => {
       // `Gume` exige `Vocação` antes; o tronco já comprado é o cenário real.
       id: "vet", nome: "Vet", classe: 4, nivel: 40, xp: 0, camada: 0,
       estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: { raiz: 1 }, equipado: {}, mochila: [],
+      mortes: 0, gastos: { raiz: 1 }, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
     };
     const local = montar([veterano]);
 
@@ -571,7 +571,7 @@ describe("árvore de habilidade", () => {
     const veterano: Personagem = {
       id: "mago", nome: "Mago", classe: 4, nivel: 40, xp: 0, camada: 0,
       estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: { raiz: 1, gume: 1 }, equipado: {}, mochila: [],
+      mortes: 0, gastos: { raiz: 1, gume: 1 }, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
     };
     const local = montar([veterano]);
 
@@ -588,7 +588,7 @@ describe("árvore de habilidade", () => {
     const veterano: Personagem = {
       id: "afoito", nome: "Afoito", classe: 4, nivel: 40, xp: 0, camada: 0,
       estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: {}, equipado: {}, mochila: [],
+      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
     };
     const local = montar([veterano]);
     const r = await local.inject({
@@ -605,7 +605,7 @@ describe("árvore de habilidade", () => {
     const pronto: Personagem = {
       id: "renasce", nome: "Renasce", classe: 4, nivel: naParede, xp: 0,
       camada: 0, estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: { raiz: 5, gume: 3 }, equipado: {}, mochila: [],
+      mortes: 0, gastos: { raiz: 5, gume: 3 }, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
     };
     const local = montar([pronto]);
     const r = await local.inject({

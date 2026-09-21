@@ -15,6 +15,7 @@ export {
 } from "./balanceamento.ts";
 export * from "./arvore.ts";
 export * from "./item.ts";
+export * from "./arena.ts";
 export * from "./conta.ts";
 export {
   type Anuncio,
@@ -32,6 +33,13 @@ export {
 export {
   ANUNCIOS_POR_CONTA,
   DIZIMO_DO_MERCADO,
+  ELO_INICIAL,
+  ELO_PESO,
+  ELO_PISO,
+  ESPERA_DO_MESMO_ALVO_MS,
+  DESCANSO_POR_HORA,
+  POCAO_CURA,
+  POCAO_EM_VITORIAS,
   PRECO_MAXIMO,
   PRECO_MINIMO,
 } from "./balanceamento.ts";

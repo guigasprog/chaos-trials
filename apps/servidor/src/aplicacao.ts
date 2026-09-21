@@ -27,8 +27,12 @@ import {
   criarPersonagem,
   custoDoRevive,
   debitarPremium,
+  beberPocao,
   desequipar,
   desmanchar,
+  podeBeberPocao,
+  POCAO_CURA,
+  precoDaPocao,
   type Encaixe,
   ENCAIXES,
   equipar,
@@ -175,6 +179,17 @@ function paraCliente(p: Personagem) {
       return { id: h.id, nome: h.nome, descricao: h.descricao, recarga: h.recarga };
     }),
     custoDoRevive: custoDoRevive(),
+    /*
+     * A poção, já resolvida pelo servidor: preço, quanto cura e o motivo
+     * de não dar. Mesma regra da árvore e do slot — a tela mostra, não
+     * recalcula, senão a regra diverge nos dois lados.
+     */
+    pocao: {
+      preco: precoDaPocao(p),
+      cura: Math.ceil(vidaMaximaDe(p) * POCAO_CURA),
+      podeBeber: podeBeberPocao(p) === null,
+      impedimento: podeBeberPocao(p),
+    },
     arvore: arvoreParaCliente(p),
     equipado: Object.fromEntries(
       ENCAIXES.flatMap((e) => {
@@ -577,8 +592,16 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     const { personagem, relatorio } = carregado;
     return {
       ...paraCliente(personagem),
+      /*
+       * O relatório aparece se houve batalha OU se houve descanso.
+       *
+       * Só com `batalhas > 0` o caso mais importante do descanso ficava
+       * mudo: quem volta ferido não luta nada, passa o tempo todo se
+       * curando, e a tela não contava nada — "deixei AFK para curar"
+       * entregava a cura e nenhuma notícia dela.
+       */
       ausencia:
-        relatorio.batalhas > 0
+        relatorio.batalhas > 0 || relatorio.vidaRecuperada > 0
           ? {
               horas: Number(relatorio.horasCreditadas.toFixed(2)),
               batalhas: relatorio.batalhas,
@@ -586,6 +609,8 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
               xp: relatorio.xpGanho,
               sucata: relatorio.sucataGanha,
               morreu: relatorio.morreu,
+              horasDescansando: relatorio.horasDescansando,
+              vidaRecuperada: relatorio.vidaRecuperada,
             }
           : null,
     };
@@ -699,13 +724,22 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
 
     const premio = premioDe(sessao.nivelInicial, sessao.tipo);
     const ganho = ganharXp(guardado, premio.xp);
+    /*
+     * A vida com que o herói SAIU da luta.
+     *
+     * `guardado` é o personagem de ANTES da batalha; usar a vida dele
+     * aqui faria vencer não custar nada, e a vida deixaria de atravessar
+     * as batalhas — que é o ponto inteiro. Subir de nível cura, e nesse
+     * caso `ganharXp` já devolveu a barra cheia.
+     */
+    const sobrou = sessao.batalha.combatentes.heroi?.vida ?? guardado.vida;
     let atualizado: Personagem = {
       ...ganho.personagem,
       sucata: ganho.personagem.sucata + premio.sucata,
-      // A mesma recuperação que o offline aplica. Sem ela, uma vitória
-      // apertada deixa a luta seguinte impossível — e com revive pago isso
-      // seria cobrar por uma dificuldade que o desenho criou.
-      vida: vidaAposVitoria(ganho.personagem),
+      vida:
+        ganho.niveisSubidos > 0
+          ? ganho.personagem.vida
+          : vidaAposVitoria(ganho.personagem, sobrou),
     };
 
     /*
@@ -1187,6 +1221,31 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       const { personagem, sucata } = desmanchar(carregado.personagem, corpo.item!);
       await armazenamento.personagens.salvar(personagem);
       return { ...paraCliente(personagem), rendeu: sucata };
+    });
+  });
+
+  /**
+   * Beber uma poção.
+   *
+   * O descanso não tem rota: ele acontece sozinho em `carregar`, junto
+   * com a progressão offline. Um botão "descansar" seria um botão que
+   * pede para o jogador esperar olhando a tela.
+   */
+  app.post("/personagens/:id/pocao", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const { id } = pedido.params as { id: string };
+
+    return filas.executar(chaveDoPersonagem(id), async () => {
+      const carregado = await meuPersonagem(conta, id, resposta);
+      if (!carregado) return;
+
+      const impede = podeBeberPocao(carregado.personagem);
+      if (impede) return resposta.status(409).send({ erro: impede });
+
+      const { personagem, curou, pagou } = beberPocao(carregado.personagem);
+      await armazenamento.personagens.salvar(personagem);
+      return { ...paraCliente(personagem), curou, pagou };
     });
   });
 

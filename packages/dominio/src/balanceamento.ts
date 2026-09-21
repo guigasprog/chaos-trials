@@ -149,29 +149,31 @@ export const PREMIO_DO_JULGAMENTO = 6;
 /**
  * Com quanta vida o personagem fica depois de recuar de uma batalha comum.
  *
- * Era 0,35, escolhido por parecer "um bom susto", e a medição mostrou que
- * era um poço: com 35% da vida a taxa de vitória cai para 11% no nível 10 e
- * para ZERO no nível 3 — testadas 60 lutas seguidas sem uma vitória. Como
- * derrota comum não mata, o personagem não morria nem voltava: ficava preso
- * perdendo para sempre, e a única saída era abandonar o jogo.
+ * ## Por que já foi 0,70
  *
- * 0,70 é piso, não desconto acumulado: perder de novo devolve ao mesmo
- * lugar. Com ele a vitória seguinte fica entre 58% e 77%, então a derrota
- * custa tempo — que é o que ela deve custar — sem fechar a saída.
+ * Era 0,35, escolhido por parecer "um bom susto", e a medição mostrou um
+ * poço: com 35% da vida a taxa de vitória caía para 11% no nível 10 e
+ * ZERO no nível 3 — 60 lutas seguidas sem uma vitória. Como derrota
+ * comum não mata, o personagem não morria nem voltava. O efeito estava
+ * na CAUDA, não na mediana: em 120 corridas de 45 batalhas, o jogador
+ * mediano chegava ao nível 10 dos dois jeitos, e o azarado ficava preso
+ * no 2. Medir só a mediana teria dito "não muda nada".
  *
- * O EFEITO ESTÁ NA CAUDA, não na mediana, e isso importa para quem for
- * mexer aqui. Simulando 120 corridas de 45 batalhas com o kit completo:
+ * ## Por que agora é 0,12
  *
- *              nível mediano   pior nível
- *   0,35            10              2
- *   0,70            10              9
+ * Aquele 0,70 tinha de ser generoso porque era a ÚNICA rede: vencer
+ * curava tudo, e quem recuava só voltava vencendo. Agora há três formas
+ * de curar — subir de nível, poção e descanso —, então a rede não
+ * precisa mais estar no recuo, e mantê-la ali criava o absurdo inverso:
+ * entrar numa luta com 30% de vida, perder, e sair com 70%. Perder seria
+ * a cura mais barata do jogo.
  *
- * O jogador mediano nunca percebeu diferença. O azarado ficava preso no
- * nível 2 depois de 45 batalhas. É o formato de um poço: ele não piora a
- * média, ele prende quem cai. Medir só a mediana teria dito "não muda
- * nada" — e foi por não medir a cauda que os 0,35 sobreviveram tanto.
+ * 0,12 é o que a derrota merece: o personagem sai destroçado e precisa
+ * de uma poção (ou de meia hora de descanso) para voltar. O poço não
+ * volta porque o descanso é grátis e sempre funciona — o que o teste em
+ * `recuo.test.ts` verifica.
  */
-export const VIDA_APOS_RECUAR = 0.7;
+export const VIDA_APOS_RECUAR = 0.12;
 
 // ── Morte ────────────────────────────────────────────────────────────────
 
@@ -208,6 +210,116 @@ export const CHANCE_DE_QUEDA_JULGAMENTO = 1;
  * arriscar o personagem.
  */
 export const SORTEIOS_DO_JULGAMENTO = 2;
+
+// ── Vida entre batalhas ──────────────────────────────────────────────────
+
+/*
+ * A vida ATRAVESSA as batalhas, e há três formas de recuperá-la: subir
+ * de nível (grátis e total), poção (custa sucata) e descanso (custa
+ * tempo). Antes, vencer curava tudo — a mudança é de desenho, e o que a
+ * medição antiga dizia continua valendo: com UMA fonte só e ela sendo
+ * fraca, o personagem morria em três batalhas. Por isso são três.
+ */
+
+/*
+ * ## Os dois números da poção, e como saíram
+ *
+ * Chutei dois pares e os dois falharam. Depois varri quatro curas por
+ * três preços, 25 corridas de 200 passos por célula, medindo a PIOR das
+ * 25 — porque corrida única é ruído: a mesma combinação deu 0 e 46
+ * descansos dependendo da semente.
+ *
+ *   cura | preço | nível | descansos (pior) | sucata (pior)
+ *   0,60 | 0,80v |    50 |          18 (46) |      62 (-51)   <- era isto
+ *   0,60 | 0,60v |    50 |           2 (16) |      374 (69)
+ *   0,75 | 0,80v |    50 |           2 (20) |     390 (-43)
+ *   0,75 | 0,60v |    50 |            0 (0) |     929 (516)   <- é isto
+ *   1,00 | 0,60v |    50 |            0 (0) |    1193 (687)
+ *
+ * O critério é do jogador: nunca parar por falta de sucata, nem na pior
+ * corrida, e sobrar moeda para o mercado existir. Cura total também
+ * fecha e foi descartada — "curar uma porção" é o que o desenho pede, e
+ * poção que enche a barra apaga a diferença entre ela e subir de nível.
+ *
+ * A tabela inteira está em `scripts/pocao-varredura.ts`.
+ */
+
+/** Quanto da vida máxima uma poção devolve. */
+export const POCAO_CURA = 0.75;
+
+/**
+ * Preço da poção, em VITÓRIAS.
+ *
+ * Atrelado ao que se ganha jogando, e não a uma fórmula paralela: é a
+ * única forma de o laço fechar sozinho em qualquer nível. A primeira
+ * tentativa usava `base * raiz(nível)` e custava 5,5 vitórias por poção
+ * — impagável.
+ */
+export const POCAO_EM_VITORIAS = 0.6;
+export const POCAO_PRECO_MINIMO = 3;
+
+/**
+ * Quanto da vida máxima volta por hora de descanso.
+ *
+ * 0,30 enche a barra em pouco mais de três horas — uma noite fora
+ * devolve tudo, e uma pausa para o café devolve um pedaço que vale a
+ * pena. Mais rápido que isto e a poção não teria razão de existir;
+ * muito mais lento e "deixar AFK" viraria "não jogar".
+ */
+export const DESCANSO_POR_HORA = 0.3;
+
+/**
+ * Abaixo desta fração, o personagem offline PARA de lutar e descansa.
+ *
+ * Sem este limiar, o offline gastaria a vida inteira em batalhas, perderia
+ * a última e devolveria o personagem ferido — e "deixei AFK para curar"
+ * entregaria o oposto do que promete.
+ */
+export const OFFLINE_DESCANSA_ABAIXO_DE = 0.55;
+
+// ── Arena (PvP) ──────────────────────────────────────────────────────────
+
+/** Onde todo mundo começa. 1.000 é a convenção, e convenção tem valor. */
+export const ELO_INICIAL = 1000;
+
+/**
+ * Quanto um duelo move o elo, no máximo.
+ *
+ * 24 é o meio-termo de sempre: com 40, três derrotas seguidas jogam
+ * alguém longe demais e o número vira ruído; com 12, subir exige dezenas
+ * de duelos e ninguém acompanha o próprio progresso.
+ */
+export const ELO_PESO = 24;
+
+/**
+ * Piso do elo.
+ *
+ * Protege quem está começando de um mergulho do qual não se sai: elo
+ * baixo demais e ninguém te desafia, e sem desafio não há como subir.
+ */
+export const ELO_PISO = 200;
+
+/**
+ * Quanto de vida o DESAFIANTE gasta por duelo.
+ *
+ * O custo da arena é tempo, não patrimônio: ele volta ferido e espera
+ * uma vitória para se curar. Nunca morre — permadeath é do julgamento,
+ * onde a pessoa escolheu a aposta, e não de um duelo contra uma ficha
+ * parada.
+ */
+export const DESGASTE_DA_ARENA = 0.4;
+
+/** Sucata por vitória na arena, escalada pela raiz do nível. */
+export const PREMIO_DA_ARENA = 12;
+
+/**
+ * Quanto tempo entre dois duelos contra o MESMO defensor.
+ *
+ * Sem isto, o melhor jogo seria achar uma ficha fraca e duelar contra
+ * ela em laço. Vinte minutos é o bastante para obrigar a procurar outro
+ * alvo sem transformar a arena em sala de espera.
+ */
+export const ESPERA_DO_MESMO_ALVO_MS = 20 * 60 * 1000;
 
 // ── Mercado ──────────────────────────────────────────────────────────────
 

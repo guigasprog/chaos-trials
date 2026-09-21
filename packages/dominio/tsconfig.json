@@ -1,4 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*.ts", "testes/**/*.ts"]
+  // `scripts` entra aqui de propósito. As sondas de balanceamento decidem
+  // números do jogo, e fora do type-check uma delas chamou
+  // `vidaAposVitoria(p)` depois de a função passar a exigir dois
+  // argumentos — media o comportamento ANTIGO e eu reportei a conclusão
+  // como se fosse a nova. Script que decide desenho é código de verdade.
+  "include": ["src/**/*.ts", "testes/**/*.ts", "scripts/**/*.ts"]
 }

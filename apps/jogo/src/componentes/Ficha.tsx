@@ -139,10 +139,27 @@ export function Ficha({
 
       {p.ausencia && (
         <p className="painel surge p-5 text-[0.88rem] leading-relaxed text-tinta-fraca">
-          Enquanto você esteve fora por {p.ausencia.horas}h, seu personagem
-          travou {n(p.ausencia.batalhas)} batalhas e venceu{" "}
-          {n(p.ausencia.vitorias)} — ganhando {n(p.ausencia.xp)} de experiência
-          e {n(p.ausencia.sucata)} de sucata.
+          Enquanto você esteve fora por {p.ausencia.horas}h
+          {p.ausencia.batalhas > 0 ? (
+            <>
+              , seu personagem travou {n(p.ausencia.batalhas)} batalhas e venceu{" "}
+              {n(p.ausencia.vitorias)} — ganhando {n(p.ausencia.xp)} de
+              experiência e {n(p.ausencia.sucata)} de sucata
+            </>
+          ) : (
+            <>, seu personagem estava ferido demais para lutar</>
+          )}
+          {/* O descanso precisa ser dito: sem isto, "deixei AFK para curar"
+              entrega a cura e nenhuma notícia dela. */}
+          {p.ausencia.vidaRecuperada > 0 && (
+            <>
+              . Depois descansou {p.ausencia.horasDescansando}h e recuperou{" "}
+              <strong className="text-verdete">
+                {n(p.ausencia.vidaRecuperada)} de vida
+              </strong>
+            </>
+          )}
+          .
         </p>
       )}
 
@@ -224,6 +241,23 @@ export function Ficha({
           )}
 
           <div className="flex flex-wrap gap-4">
+            {/*
+              * A poção fica JUNTO dos verbos de luta, e não numa tela de
+              * itens: a decisão "bebo ou arrisco" acontece no instante de
+              * apertar "enfrentar", e separá-las obrigaria a ir e voltar.
+              */}
+            {p.vida < p.vidaMaxima && (
+              <button
+                type="button"
+                disabled={!p.pocao.podeBeber || ocupado}
+                onClick={() => tentar(() => api.beberPocao(p.id))}
+                className="botao botao-grande"
+                title={p.pocao.impedimento ?? `Cura ${n(p.pocao.cura)} de vida`}
+              >
+                Poção · {n(p.pocao.preco)} suc
+              </button>
+            )}
+
             {/* Só os dois verbos de luta aqui. A árvore mora na barra do
                 herói, onde ela fica ao alcance de qualquer tela. */}
             <button

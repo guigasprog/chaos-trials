@@ -33,6 +33,12 @@ import {
   NIVEL_DA_SUBCLASSE,
   OFFLINE_RITMO,
   OFFLINE_TETO_HORAS,
+  DESCANSO_POR_HORA,
+  ELO_INICIAL,
+  OFFLINE_DESCANSA_ABAIXO_DE,
+  POCAO_CURA,
+  POCAO_EM_VITORIAS,
+  POCAO_PRECO_MINIMO,
   PRECO_REVIVE,
   VIDA_APOS_RECUAR,
 } from "./balanceamento.ts";
@@ -84,6 +90,10 @@ export interface Personagem {
   readonly equipado: Partial<Record<Encaixe, Item>>;
   /** O que está guardado. Tem teto: ver `MOCHILA_MAXIMA`. */
   readonly mochila: readonly Item[];
+  /** Pontuação na arena. Ver `arena.ts`. */
+  readonly elo: number;
+  /** Vitórias e derrotas em duelos, contando os dois lados. */
+  readonly duelos: { vitorias: number; derrotas: number; defesas: number };
 }
 
 export function criarPersonagem(dados: {
@@ -113,6 +123,8 @@ export function criarPersonagem(dados: {
     gastos: zerar(),
     equipado: {},
     mochila: [],
+    elo: ELO_INICIAL,
+    duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
   };
 }
 
@@ -129,12 +141,16 @@ export function criarPersonagem(dados: {
  */
 export function normalizar(p: Personagem): Personagem {
   const inteiro = Math.round(p.xp);
-  if (p.gastos && p.mochila && p.equipado && p.xp === inteiro) return p;
+  const completo =
+    p.gastos && p.mochila && p.equipado && p.elo !== undefined && p.duelos;
+  if (completo && p.xp === inteiro) return p;
   return {
     ...p,
     gastos: p.gastos ?? zerar(),
     equipado: p.equipado ?? {},
     mochila: p.mochila ?? [],
+    elo: p.elo ?? ELO_INICIAL,
+    duelos: p.duelos ?? { vitorias: 0, derrotas: 0, defesas: 0 },
     xp: inteiro,
   };
 }
@@ -317,11 +333,27 @@ export function ganharXp(p: Personagem, quantidade: number): GanhoDeXp {
     subidos += 1;
   }
 
-  const personagem: Personagem = { ...p, nivel, xp };
+  /*
+   * Subir de nível CURA por completo.
+   *
+   * É a única cura grátis do jogo, e ela está aqui de propósito: o nível
+   * novo aumenta a vida máxima, e chegar nele com a barra pela metade
+   * transformaria a recompensa em "agora você tem mais vida faltando".
+   * É também o que faz a progressão ter fôlego — cada nível é um fôlego
+   * literal.
+   *
+   * Sem subir de nível, a vida NÃO se recupera sozinha: ela atravessa as
+   * batalhas, e voltar ao máximo custa poção ou tempo de descanso.
+   */
+  const curado: Personagem =
+    subidos > 0
+      ? { ...p, nivel, xp, vida: vidaMaximaDe({ ...p, nivel }) }
+      : { ...p, nivel, xp };
+
   return {
-    personagem,
+    personagem: curado,
     niveisSubidos: subidos,
-    subclassesAbertas: subidos > 0 ? subclassesDisponiveis(personagem) : [],
+    subclassesAbertas: subidos > 0 ? subclassesDisponiveis(curado) : [],
   };
 }
 
@@ -436,6 +468,9 @@ export function renascer(p: Personagem, classeRaiz: number): Personagem {
 
   const camada = p.camada + 1;
   return {
+    // O elo e o histórico de duelos ATRAVESSAM o renascimento: a arena
+    // mede a pessoa jogando, e zerar a reputação a cada camada faria o
+    // ranking medir só quem renasceu menos.
     ...p,
     classe: classeRaiz,
     nivel: 1,
@@ -455,18 +490,104 @@ export function renascer(p: Personagem, classeRaiz: number): Personagem {
 const SEGUNDOS_POR_BATALHA = 30;
 
 /**
- * Vencer devolve a vida cheia.
+ * Vencer NÃO cura. A vida atravessa as batalhas.
  *
- * Medido antes de decidir: com recuperação de 25% a mediana era 3 batalhas até
- * morrer; com 50%, quatro; e mesmo com cura total, 8 no nível 20 e 3 no 50. O
- * desgaste acumulado não era o problema principal — era só o mais visível.
+ * Isto já foi cura total, e a mudança é de desenho, não de correção: a
+ * vida passa a ser um recurso que se administra entre lutas, com três
+ * formas de recuperá-la — subir de nível (grátis e total), beber poção
+ * (custa sucata) e descansar (custa tempo).
  *
- * Cura total põe a tensão DENTRO de cada batalha, que é onde ela pode ser
- * jogada. Perder por dano de arranhão herdado de três lutas atrás não é
- * decisão de ninguém, é só contabilidade.
+ * O que a medição antiga dizia continua verdade e por isso as três
+ * existem: SEM nenhuma delas, com recuperação de 25% a mediana era 3
+ * batalhas até morrer. O que tornava a cura total necessária era ser a
+ * única fonte; deixando de ser, a tensão sai de dentro de uma luta só e
+ * vira a pergunta "aguento mais uma?", que é uma decisão de verdade.
+ *
+ * Medido depois da mudança, 400 corridas — ver `arena`/`descanso` no
+ * relatório da simulação.
  */
-export function vidaAposVitoria(p: Personagem): number {
-  return vidaMaximaDe(p);
+export function vidaAposVitoria(p: Personagem, vidaNaBatalha: number): number {
+  /*
+   * A vida com que o herói SAIU da luta, e não a que ele tinha antes.
+   *
+   * Parece óbvio e não era: o servidor guardava o personagem de antes da
+   * batalha e só somava XP e sucata em cima dele. Com cura total na
+   * vitória isso não aparecia — o valor era sobrescrito pelo máximo de
+   * qualquer jeito. Tirada a cura, o defeito ficaria: vencer não custaria
+   * vida nenhuma e a mudança inteira seria enfeite.
+   */
+  return Math.max(1, Math.min(Math.round(vidaNaBatalha), vidaMaximaDe(p)));
+}
+
+// ── Poções e descanso ────────────────────────────────────────────────────
+
+/**
+ * Quanto uma poção custa, em sucata.
+ *
+ * Atrelada ao que uma VITÓRIA rende, e não a uma fórmula paralela. É a
+ * única forma de o laço fechar sozinho em qualquer nível: a poção custa
+ * sempre a mesma fração do que se ganha jogando.
+ *
+ * A primeira tentativa usou `base * raiz(nível)` e a medição mostrou o
+ * estrago: no nível 10 a poção custava 44 e uma vitória rendia 8 —
+ * cinco vitórias e meia por poção, num ritmo de duas lutas por poção.
+ * Impagável, e o jogador ficaria parado esperando as três horas de
+ * descanso para sempre.
+ */
+export function precoDaPocao(p: Personagem): number {
+  return Math.max(
+    POCAO_PRECO_MINIMO,
+    Math.round(recompensaDe(p.nivel, true).sucata * POCAO_EM_VITORIAS),
+  );
+}
+
+export function podeBeberPocao(p: Personagem): string | null {
+  if (p.estado === "tumulo") return "quem está no túmulo não bebe nada";
+  if (p.vida >= vidaMaximaDe(p)) return "a vida já está cheia";
+  if (p.sucata < precoDaPocao(p)) {
+    return `a poção custa ${precoDaPocao(p)} e você tem ${p.sucata}`;
+  }
+  return null;
+}
+
+export interface Pocao {
+  readonly personagem: Personagem;
+  readonly curou: number;
+  readonly pagou: number;
+}
+
+/**
+ * Bebe uma poção: cura uma FRAÇÃO da vida máxima, e cobra sucata.
+ *
+ * Fração e não valor fixo, pelo mesmo motivo do preço. E fração da
+ * máxima e não da que falta: curar "metade do que falta" nunca chega ao
+ * cheio e produz aquela sensação de estar sempre um pouco quebrado.
+ */
+export function beberPocao(p: Personagem): Pocao {
+  const impede = podeBeberPocao(p);
+  if (impede) throw new Error(impede);
+
+  const maxima = vidaMaximaDe(p);
+  const pagou = precoDaPocao(p);
+  const alvo = Math.min(maxima, p.vida + Math.ceil(maxima * POCAO_CURA));
+  return {
+    personagem: { ...p, vida: alvo, sucata: p.sucata - pagou },
+    curou: alvo - p.vida,
+    pagou,
+  };
+}
+
+/**
+ * Quanto se cura descansando por um tempo.
+ *
+ * Em fração da vida máxima por hora, e não em pontos: em pontos, o
+ * descanso que enche a barra no nível 5 levaria um dia no nível 500.
+ */
+export function curaPorDescanso(p: Personagem, horas: number): number {
+  if (horas <= 0) return 0;
+  const maxima = vidaMaximaDe(p);
+  const cheio = Math.min(maxima, p.vida + maxima * DESCANSO_POR_HORA * horas);
+  return Math.max(0, Math.round(cheio) - p.vida);
 }
 
 /**
@@ -486,10 +607,17 @@ export function vidaAposVitoria(p: Personagem): number {
  * com os 35% originais o personagem não morria nem conseguia voltar.
  */
 export function recuar(p: Personagem): Personagem {
-  return {
-    ...p,
-    vida: Math.max(1, Math.round(vidaMaximaDe(p) * VIDA_APOS_RECUAR)),
-  };
+  /*
+   * Quem perdeu chegou a zero dentro da luta. Isto devolve um resto.
+   *
+   * O número era 0,70 e fazia sentido quando vencer curava tudo: era a
+   * rede que impedia o poço, e tinha de ser generosa porque era a ÚNICA
+   * rede. Agora há três formas de curar, então o resto pode ser o que a
+   * derrota merece — e 0,70 viraria absurdo do outro lado: entrar com
+   * 30%, perder, e sair com 70%. Perder seria a cura mais barata do
+   * jogo.
+   */
+  return { ...p, vida: Math.max(1, Math.round(vidaMaximaDe(p) * VIDA_APOS_RECUAR)) };
 }
 
 export interface RelatorioOffline {
@@ -501,6 +629,9 @@ export interface RelatorioOffline {
   readonly sucataGanha: number;
   /** Se a última derrota levou o personagem ao túmulo. */
   readonly morreu: boolean;
+  /** Horas passadas descansando, e o quanto isso curou. */
+  readonly horasDescansando: number;
+  readonly vidaRecuperada: number;
 }
 
 /**
@@ -530,6 +661,8 @@ export function progredirOffline(
     xpGanho: 0,
     sucataGanha: 0,
     morreu: false,
+    horasDescansando: 0,
+    vidaRecuperada: 0,
   });
 
   if (p.estado === "tumulo") return vazio({ ...p, visto: agora });
@@ -547,8 +680,20 @@ export function progredirOffline(
   let vitorias = 0;
   let xpGanho = 0;
   let sucataGanha = 0;
+  /* Quantas batalhas foram gastas antes de parar para descansar. */
+  let usadas = 0;
 
   for (let i = 0; i < total; i++) {
+    /*
+     * Ferido demais: para de lutar e passa o resto do tempo descansando.
+     *
+     * Sem este limiar o offline gastaria a vida inteira em batalhas,
+     * perderia a última e devolveria o personagem ferido — e "deixei AFK
+     * para curar" entregaria o oposto do que promete. Agora o AFK é o
+     * que o nome diz: luta enquanto dá, e descansa o resto.
+     */
+    if (atual.vida < vidaMaximaDe(atual) * OFFLINE_DESCANSA_ABAIXO_DE) break;
+    usadas = i;
     const heroi = criarCombatente({
       id: "heroi",
       nome: atual.nome,
@@ -586,18 +731,34 @@ export function progredirOffline(
       sucataGanha += recompensa.sucata;
 
       const ganho = ganharXp(atual, recompensa.xp);
+      const sobrou = batalha.combatentes.heroi?.vida ?? atual.vida;
       atual = {
         ...ganho.personagem,
         sucata: ganho.personagem.sucata + recompensa.sucata,
-        vida: vidaAposVitoria(ganho.personagem),
+        // Subir de nível já curou dentro de `ganharXp`; fora disso vale o
+        // que sobrou na luta.
+        vida:
+          ganho.niveisSubidos > 0
+            ? ganho.personagem.vida
+            : vidaAposVitoria(ganho.personagem, sobrou),
       };
+      usadas = i + 1;
     } else {
       // Offline só há batalha comum: derrota é recuo. Morte automática
       // enquanto ninguém olha seria punir a ausência, e a pessoa não escolheu
       // arriscar nada.
       atual = recuar(atual);
+      usadas = i + 1;
       break;
     }
+  }
+
+  // O tempo que sobrou vira descanso.
+  const horasLutando = (usadas * SEGUNDOS_POR_BATALHA) / 3600;
+  const horasDescansando = Math.max(0, horas - horasLutando);
+  const vidaRecuperada = curaPorDescanso(atual, horasDescansando);
+  if (vidaRecuperada > 0) {
+    atual = { ...atual, vida: atual.vida + vidaRecuperada };
   }
 
   return {
@@ -609,6 +770,8 @@ export function progredirOffline(
     sucataGanha,
     // Offline nunca mata: só há batalha comum, e derrota ali é recuo.
     morreu: false,
+    horasDescansando: Number(horasDescansando.toFixed(2)),
+    vidaRecuperada,
   };
 }
 
