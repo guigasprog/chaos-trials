@@ -1,11 +1,31 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from "fastify";
 import cors from "@fastify/cors";
 import {
+  adicionarPersonagem,
   ARVORE,
   bonusDoPersonagem,
   classePorIndice,
+  comprarSlot,
+  type Conta,
+  creditarPremium,
+  criarConta,
   criarPersonagem,
   custoDoRevive,
+  debitarPremium,
+  normalizarConta,
+  normalizarEmail,
+  podeComprarSlot,
+  precoDoProximoSlot,
+  removerPersonagem,
+  senhaAceitavel,
+  slotsLivres,
+  slotsTotais,
+  SLOTS_GRATIS,
+  SLOTS_MAXIMO,
   evoluirArvore,
   escolherSubclasse,
   ganharXp,
@@ -38,6 +58,12 @@ import {
   premioDe,
   type TipoDeBatalha,
 } from "./batalhas.ts";
+import {
+  conferirSenha,
+  gastarTempoDeConferencia,
+  guardarSenha,
+} from "./senhas.ts";
+import { Sessoes, tokenDoCabecalho } from "./sessoes.ts";
 
 /**
  * A API.
@@ -47,21 +73,45 @@ import {
  * `toxina`", "quero renascer". Quem decide é o domínio, aqui dentro. É isso
  * que torna trapaça impossível, e não criptografia.
  *
- * Autenticação de verdade é o sub-projeto 6. Nesta fatia o id do personagem é
- * a credencial, o que é suficiente para jogar localmente e **não** é seguro
- * para expor — está marcado abaixo onde isso precisa mudar.
+ * Toda rota de personagem exige sessão e confere que o personagem é DAQUELA
+ * conta. Antes o id do personagem era a credencial: quem descobrisse o id
+ * jogava com ele. Agora o id é só um endereço, e a credencial é o token.
  */
 
 export interface Opcoes {
   armazenamento: Armazenamento;
   /** Injetável para o teste não depender do relógio da máquina. */
   agora?: () => number;
+  /** Injetável para o teste inspecionar e reaproveitar sessões. */
+  sessoes?: Sessoes;
   log?: boolean;
   /**
    * De onde o navegador pode chamar. Vazio libera tudo, que é o certo em
    * desenvolvimento e errado em produção.
    */
   origens?: readonly string[];
+}
+
+/** A conta como o cliente a vê. A senha nunca sai daqui, em forma nenhuma. */
+function contaParaCliente(c: Conta) {
+  return {
+    id: c.id,
+    email: c.email,
+    premium: c.premium,
+    slots: {
+      total: slotsTotais(c),
+      usados: c.personagens.length,
+      livres: slotsLivres(c),
+      gratis: SLOTS_GRATIS,
+      comprados: c.slotsComprados,
+      maximo: SLOTS_MAXIMO,
+      precoDoProximo: precoDoProximoSlot(c),
+      // Resolvido no servidor, como na árvore: botão apagado sem motivo não
+      // leva a ação nenhuma.
+      podeComprar: podeComprarSlot(c).pode,
+      impedimento: podeComprarSlot(c).motivo ?? null,
+    },
+  };
 }
 
 /** O personagem como o cliente o vê: com o derivado já calculado. */
@@ -80,7 +130,6 @@ function paraCliente(p: Personagem) {
     vida: p.vida,
     vidaMaxima: vidaMaximaDe(p),
     sucata: p.sucata,
-    premium: p.premium,
     mortes: p.mortes,
     parede: Math.ceil(nivelDaParede(p.camada)),
     podeRenascer: prontoParaRenascer(p),
@@ -134,6 +183,11 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
   const { armazenamento } = opcoes;
   const agora = opcoes.agora ?? (() => Date.now());
   const batalhas = new Batalhas();
+  const sessoes = opcoes.sessoes ?? new Sessoes();
+
+  /** Sufixo de id: aleatório mais tempo, para não colidir nem ordenar mal. */
+  const novoSufixo = () =>
+    `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
 
   /*
    * CORS.
@@ -158,14 +212,14 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
    * "quando a ausência foi creditada" viraria negociável.
    */
   async function carregar(id: string) {
-    const bruto = await armazenamento.buscar(id);
+    const bruto = await armazenamento.personagens.buscar(id);
     if (!bruto) return null;
     // Campo novo em dado já gravado chega indefinido; morre aqui, na porta.
     const guardado = normalizar(bruto);
 
     const relatorio = progredirOffline(guardado, agora());
     if (relatorio.batalhas > 0 || relatorio.personagem.visto !== guardado.visto) {
-      await armazenamento.salvar(relatorio.personagem);
+      await armazenamento.personagens.salvar(relatorio.personagem);
     }
     return { personagem: relatorio.personagem, relatorio };
   }
@@ -182,10 +236,179 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     return resposta.send(erro);
   });
 
+  // ── Sessão ─────────────────────────────────────────────────────────────
+
+  /**
+   * Quem está pedindo, ou `null`.
+   *
+   * Devolve a conta já normalizada. Não responde erro: quem chama decide se
+   * a rota exige sessão ou só se comporta diferente com ela.
+   */
+  async function quemPede(pedido: FastifyRequest): Promise<Conta | null> {
+    const contaId = sessoes.dono(
+      tokenDoCabecalho(pedido.headers as Record<string, unknown>),
+      agora(),
+    );
+    if (!contaId) return null;
+    const bruta = await armazenamento.contas.buscar(contaId);
+    return bruta ? normalizarConta(bruta) : null;
+  }
+
+  /**
+   * A conta, ou 401 já respondido.
+   *
+   * O padrão `if (!conta) return` em cada rota é feio e é de propósito: um
+   * gancho global que protegesse "tudo menos uma lista" erra por omissão na
+   * hora em que alguém adiciona uma rota e esquece da lista. Aqui, esquecer
+   * é visível na própria rota.
+   */
+  async function exigirConta(
+    pedido: FastifyRequest,
+    resposta: FastifyReply,
+  ): Promise<Conta | null> {
+    const conta = await quemPede(pedido);
+    if (!conta) {
+      void resposta.status(401).send({ erro: "entre para continuar" });
+      return null;
+    }
+    return conta;
+  }
+
+  /**
+   * Carrega um personagem CONFERINDO que ele é desta conta.
+   *
+   * 404 e não 403 quando não é: responder "existe, mas não é seu" conta a
+   * quem chuta ids quais existem. Para quem não é dono, o personagem
+   * simplesmente não existe.
+   */
+  async function meuPersonagem(
+    conta: Conta,
+    id: string,
+    resposta: FastifyReply,
+  ) {
+    if (!conta.personagens.includes(id)) {
+      void resposta.status(404).send({ erro: "personagem não encontrado" });
+      return null;
+    }
+    const carregado = await carregar(id);
+    if (!carregado) {
+      void resposta.status(404).send({ erro: "personagem não encontrado" });
+      return null;
+    }
+    return carregado;
+  }
+
   app.get("/saude", async () => ({
     ok: true,
     batalhasAtivas: batalhas.ativas,
+    sessoesAtivas: sessoes.ativas,
   }));
+
+  /**
+   * Cadastro.
+   *
+   * O e-mail é o identificador, e a colisão é conferida na lista de contas.
+   * Com banco de verdade isso vira índice único — a checagem aqui é
+   * suscetível a corrida entre dois cadastros simultâneos do mesmo e-mail, e
+   * está anotado para não passar despercebido na migração.
+   */
+  app.post("/contas", async (pedido, resposta) => {
+    const corpo = pedido.body as { email?: string; senha?: string };
+    const email = normalizarEmail(corpo?.email ?? "");
+    const senha = corpo?.senha ?? "";
+
+    if (!senhaAceitavel(senha)) {
+      return resposta
+        .status(400)
+        .send({ erro: "a senha precisa ter de 8 a 200 caracteres" });
+    }
+
+    const existentes = await armazenamento.contas.listar();
+    if (existentes.some((c) => c.email === email)) {
+      return resposta.status(409).send({ erro: "este e-mail já tem conta" });
+    }
+
+    const conta = criarConta({
+      id: `c${novoSufixo()}`,
+      email,
+      senha: await guardarSenha(senha),
+      agora: agora(),
+    });
+    await armazenamento.contas.salvar(conta);
+
+    const token = sessoes.abrir(conta.id, agora());
+    return resposta.status(201).send({ token, conta: contaParaCliente(conta) });
+  });
+
+  /**
+   * Entrar.
+   *
+   * A resposta é a mesma para e-mail inexistente e senha errada, e o caminho
+   * do e-mail inexistente gasta o mesmo tempo de propósito: sem isso dá para
+   * enumerar quem tem conta cronometrando respostas.
+   */
+  app.post("/sessoes", async (pedido, resposta) => {
+    const corpo = pedido.body as { email?: string; senha?: string };
+    const email = normalizarEmail(corpo?.email ?? "");
+    const senha = corpo?.senha ?? "";
+    const recusa = { erro: "e-mail ou senha não conferem" };
+
+    const contas = await armazenamento.contas.listar();
+    const achada = contas.find((c) => c.email === email);
+    if (!achada) {
+      await gastarTempoDeConferencia();
+      return resposta.status(401).send(recusa);
+    }
+
+    const { confere, precisaAtualizar } = await conferirSenha(senha, achada.senha);
+    if (!confere) return resposta.status(401).send(recusa);
+
+    // Hash antigo é reescrito com o custo de hoje, na entrada em que ele
+    // acabou de ser conferido — o único momento em que a senha está na mão.
+    const conta = normalizarConta({
+      ...achada,
+      visto: agora(),
+      senha: precisaAtualizar ? await guardarSenha(senha) : achada.senha,
+    });
+    await armazenamento.contas.salvar(conta);
+
+    const token = sessoes.abrir(conta.id, agora());
+    return { token, conta: contaParaCliente(conta) };
+  });
+
+  app.delete("/sessoes", async (pedido) => {
+    sessoes.fechar(tokenDoCabecalho(pedido.headers as Record<string, unknown>));
+    return { ok: true };
+  });
+
+  /** Eu, e meus personagens. É a tela de slots inteira numa chamada. */
+  app.get("/eu", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+
+    const personagens = [];
+    for (const id of conta.personagens) {
+      const carregado = await carregar(id);
+      // Id órfão na lista da conta: o personagem sumiu do cofre e a conta
+      // ficou apontando para o nada. Some da resposta em vez de virar um
+      // cartão quebrado na tela.
+      if (carregado) personagens.push(paraCliente(carregado.personagem));
+    }
+
+    return { conta: contaParaCliente(conta), personagens };
+  });
+
+  app.post("/eu/slots", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+
+    const { pode, motivo } = podeComprarSlot(conta);
+    if (!pode) return resposta.status(409).send({ erro: motivo });
+
+    const atualizada = comprarSlot(conta);
+    await armazenamento.contas.salvar(atualizada);
+    return { conta: contaParaCliente(atualizada) };
+  });
 
   /** As cinco raízes, para a tela de criação. */
   app.get("/classes", async () => ({
@@ -193,6 +416,9 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
   }));
 
   app.post("/personagens", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+
     const corpo = pedido.body as { nome?: string; classe?: number };
     const nome = (corpo?.nome ?? "").trim();
     if (nome.length < 2 || nome.length > 24) {
@@ -201,22 +427,52 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     if (typeof corpo?.classe !== "number") {
       return resposta.status(400).send({ erro: "escolha uma classe" });
     }
+    if (slotsLivres(conta) <= 0) {
+      return resposta.status(409).send({
+        erro: `sem slot livre: ${conta.personagens.length} de ${slotsTotais(conta)} ocupados`,
+      });
+    }
 
-    const id = `p${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
     const p = criarPersonagem({
-      id,
+      id: `p${novoSufixo()}`,
       nome,
       classeRaiz: corpo.classe,
       agora: agora(),
     });
-    await armazenamento.salvar(p);
+    // A conta primeiro: se gravar o personagem e falhar ao ligá-lo à conta,
+    // ele fica órfão no cofre e ninguém o alcança. Na ordem inversa, o pior
+    // caso é um id na conta sem personagem — que `/eu` já ignora.
+    await armazenamento.contas.salvar(adicionarPersonagem(conta, p.id));
+    await armazenamento.personagens.salvar(p);
     return resposta.status(201).send(paraCliente(p));
   });
 
-  app.get("/personagens/:id", async (pedido, resposta) => {
+  /**
+   * Apagar libera o slot.
+   *
+   * É a saída de quem não pode pagar o revive: sem ela, dois túmulos nos
+   * dois slots gratuitos encerrariam o jogo. O custo já é alto — vão junto
+   * todas as camadas.
+   */
+  app.delete("/personagens/:id", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
     const { id } = pedido.params as { id: string };
-    const carregado = await carregar(id);
-    if (!carregado) return resposta.status(404).send({ erro: "personagem não encontrado" });
+    if (!conta.personagens.includes(id)) {
+      return resposta.status(404).send({ erro: "personagem não encontrado" });
+    }
+
+    await armazenamento.contas.salvar(removerPersonagem(conta, id));
+    await armazenamento.personagens.remover(id);
+    return { ok: true };
+  });
+
+  app.get("/personagens/:id", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const { id } = pedido.params as { id: string };
+    const carregado = await meuPersonagem(conta, id, resposta);
+    if (!carregado) return;
 
     const { personagem, relatorio } = carregado;
     return {
@@ -236,9 +492,11 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
   });
 
   app.post("/personagens/:id/batalhas", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
     const { id } = pedido.params as { id: string };
-    const carregado = await carregar(id);
-    if (!carregado) return resposta.status(404).send({ erro: "personagem não encontrado" });
+    const carregado = await meuPersonagem(conta, id, resposta);
+    if (!carregado) return;
 
     const { personagem } = carregado;
     if (personagem.estado === "tumulo") {
@@ -272,10 +530,19 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
   });
 
   app.post("/batalhas/:id/turnos", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { habilidade?: string };
     if (!corpo?.habilidade) {
       return resposta.status(400).send({ erro: "diga qual habilidade" });
+    }
+
+    // A batalha também tem dono. Sem esta conferência, quem adivinhasse o id
+    // — que é `b1`, `b2`, `b3` — jogaria o turno de outra pessoa.
+    const emAndamento = batalhas.buscar(id);
+    if (!emAndamento || !conta.personagens.includes(emAndamento.personagemId)) {
+      return resposta.status(404).send({ erro: "batalha não encontrada" });
     }
 
     const { sessao, eventos } = batalhas.agir(id, corpo.habilidade);
@@ -284,7 +551,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     // nada do que aconteceu na batalha toca o personagem.
     let resultado = null;
     if (sessao.batalha.vencedor) {
-      const guardado = await armazenamento.buscar(sessao.personagemId);
+      const guardado = await armazenamento.personagens.buscar(sessao.personagemId);
       if (guardado) {
         resultado = await concluir(guardado, sessao);
       }
@@ -309,7 +576,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
         sessao.tipo === "julgamento"
           ? morrer({ ...guardado, vida: 0 })
           : recuar(guardado);
-      await armazenamento.salvar(depois);
+      await armazenamento.personagens.salvar(depois);
       return {
         venceu: false,
         xp: 0,
@@ -331,7 +598,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       // seria cobrar por uma dificuldade que o desenho criou.
       vida: vidaAposVitoria(ganho.personagem),
     };
-    await armazenamento.salvar(atualizado);
+    await armazenamento.personagens.salvar(atualizado);
 
     return {
       venceu: true,
@@ -345,52 +612,69 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
   }
 
   app.post("/personagens/:id/arvore", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { no?: string };
-    const carregado = await carregar(id);
-    if (!carregado) return resposta.status(404).send({ erro: "personagem não encontrado" });
+    const carregado = await meuPersonagem(conta, id, resposta);
+    if (!carregado) return;
     if (!corpo?.no) return resposta.status(400).send({ erro: "diga qual nó" });
 
     const atualizado = evoluirArvore(carregado.personagem, corpo.no);
-    await armazenamento.salvar(atualizado);
+    await armazenamento.personagens.salvar(atualizado);
     return paraCliente(atualizado);
   });
 
   app.post("/personagens/:id/subclasse", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { classe?: number };
-    const carregado = await carregar(id);
-    if (!carregado) return resposta.status(404).send({ erro: "personagem não encontrado" });
+    const carregado = await meuPersonagem(conta, id, resposta);
+    if (!carregado) return;
     if (typeof corpo?.classe !== "number") {
       return resposta.status(400).send({ erro: "escolha uma subclasse" });
     }
 
     const atualizado = escolherSubclasse(carregado.personagem, corpo.classe);
-    await armazenamento.salvar(atualizado);
+    await armazenamento.personagens.salvar(atualizado);
     return paraCliente(atualizado);
   });
 
   app.post("/personagens/:id/renascer", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
     const { id } = pedido.params as { id: string };
     const corpo = pedido.body as { classe?: number };
-    const carregado = await carregar(id);
-    if (!carregado) return resposta.status(404).send({ erro: "personagem não encontrado" });
+    const carregado = await meuPersonagem(conta, id, resposta);
+    if (!carregado) return;
     if (typeof corpo?.classe !== "number") {
       return resposta.status(400).send({ erro: "escolha a raiz da vida nova" });
     }
 
     const atualizado = renascer(carregado.personagem, corpo.classe);
-    await armazenamento.salvar(atualizado);
+    await armazenamento.personagens.salvar(atualizado);
     return paraCliente(atualizado);
   });
 
+  /**
+   * Sair do túmulo. Quem paga é a CONTA.
+   *
+   * Moeda comprada com dinheiro de verdade não vive no personagem: ela
+   * sobrevive à morte dele, senão o jogo venderia algo que ele mesmo
+   * destrói. E é o que torna o revive possível — o personagem no túmulo não
+   * tem nada.
+   */
   app.post("/personagens/:id/reviver", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
     const { id } = pedido.params as { id: string };
-    const carregado = await carregar(id);
-    if (!carregado) return resposta.status(404).send({ erro: "personagem não encontrado" });
+    const carregado = await meuPersonagem(conta, id, resposta);
+    if (!carregado) return;
 
-    const { personagem, pagou } = reviver(carregado.personagem);
-    await armazenamento.salvar(personagem);
+    const { personagem, pagou } = reviver(carregado.personagem, conta.premium);
+    await armazenamento.contas.salvar(debitarPremium(conta, pagou));
+    await armazenamento.personagens.salvar(personagem);
     return { ...paraCliente(personagem), pagou };
   });
 
@@ -402,25 +686,23 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
    * qualquer exposição pública, tem de virar recibo assinado de provedor de
    * pagamento, idempotente por id de transação. Está no sub-projeto 3.
    */
-  app.post("/personagens/:id/creditar", async (pedido, resposta) => {
+  app.post("/eu/creditar", async (pedido, resposta) => {
     if (process.env.CHAOS_PERMITIR_CREDITO !== "sim") {
       return resposta.status(403).send({
         erro: "crédito direto desabilitado; use o fluxo de pagamento",
       });
     }
-    const { id } = pedido.params as { id: string };
-    const corpo = pedido.body as { quantidade?: number };
-    const quantidade = Number(corpo?.quantidade ?? 0);
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+
+    const quantidade = Number((pedido.body as { quantidade?: number })?.quantidade ?? 0);
     if (!Number.isFinite(quantidade) || quantidade <= 0) {
       return resposta.status(400).send({ erro: "quantidade inválida" });
     }
 
-    const guardado = await armazenamento.buscar(id);
-    if (!guardado) return resposta.status(404).send({ erro: "personagem não encontrado" });
-
-    const atualizado = { ...guardado, premium: guardado.premium + Math.floor(quantidade) };
-    await armazenamento.salvar(atualizado);
-    return paraCliente(atualizado);
+    const atualizada = creditarPremium(conta, Math.floor(quantidade));
+    await armazenamento.contas.salvar(atualizada);
+    return { conta: contaParaCliente(atualizada) };
   });
 
   function estadoDaBatalha(sessao: ReturnType<Batalhas["iniciar"]>) {

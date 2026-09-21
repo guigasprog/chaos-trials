@@ -59,10 +59,14 @@ export interface Personagem {
   readonly vida: number;
   /** Quando esteve online pela última vez, em ms. */
   readonly visto: number;
-  /** Moeda ganha jogando. */
+  /**
+   * Moeda ganha jogando. É do personagem, e morre com ele.
+   *
+   * A moeda COMPRADA não está aqui: ela é da conta (`Conta.premium`).
+   * Dinheiro de verdade não pode evaporar num permadeath — seria vender
+   * algo que o jogo destrói sozinho.
+   */
   readonly sucata: number;
-  /** Moeda comprada com dinheiro real. */
-  readonly premium: number;
   /** Quantas vezes já morreu — o túmulo não apaga a história. */
   readonly mortes: number;
   /** Graus comprados na árvore de habilidade, por id de nó. */
@@ -92,7 +96,6 @@ export function criarPersonagem(dados: {
     vida: vidaMaxima(atributosDe(dados.classeRaiz, 1)),
     visto: dados.agora,
     sucata: 0,
-    premium: 0,
     mortes: 0,
     gastos: zerar(),
   };
@@ -262,19 +265,23 @@ export interface Revive {
  * O túmulo prende o personagem, não a conta: quem não pode pagar cria outro do
  * zero, perdendo as camadas deste. Sem isso, não poder pagar tiraria o acesso
  * ao produto inteiro.
+ *
+ * O saldo entra por parâmetro e o débito sai no retorno porque a moeda é da
+ * CONTA, não do personagem — moeda comprada com dinheiro de verdade não pode
+ * evaporar num permadeath. Quem debita é quem tem a conta na mão; aqui só se
+ * decide se pode e quanto custa.
  */
-export function reviver(p: Personagem): Revive {
+export function reviver(p: Personagem, premiumDaConta: number): Revive {
   if (p.estado !== "tumulo") throw new Error("só se revive quem está no túmulo");
-  if (p.premium < PRECO_REVIVE) {
+  if (premiumDaConta < PRECO_REVIVE) {
     throw new Error(
-      `revive custa ${PRECO_REVIVE} e o personagem tem ${p.premium}`,
+      `revive custa ${PRECO_REVIVE} e a conta tem ${premiumDaConta}`,
     );
   }
 
   const personagem: Personagem = {
     ...p,
     estado: "vivo",
-    premium: p.premium - PRECO_REVIVE,
     vida: Math.max(1, Math.round(vidaMaximaDe(p) * 0.3)),
   };
   return { personagem, pagou: PRECO_REVIVE };

@@ -13,6 +13,33 @@ const BASE = process.env.NEXT_PUBLIC_API ?? "http://localhost:3333";
 /** Onde o id do personagem fica entre visitas. */
 const CHAVE = "chaos-trials:personagem";
 
+/** Onde o token de sessão fica entre visitas. */
+const CHAVE_TOKEN = "chaos-trials:sessao";
+
+/**
+ * A conta.
+ *
+ * A moeda premium mora aqui, e não no personagem: foi comprada com dinheiro
+ * de verdade e não pode evaporar num permadeath.
+ */
+export interface Conta {
+  id: string;
+  email: string;
+  premium: number;
+  slots: {
+    total: number;
+    usados: number;
+    livres: number;
+    gratis: number;
+    comprados: number;
+    maximo: number;
+    precoDoProximo: number;
+    /** Já resolvido pelo servidor, como na árvore. */
+    podeComprar: boolean;
+    impedimento: string | null;
+  };
+}
+
 export interface Personagem {
   id: string;
   nome: string;
@@ -25,7 +52,6 @@ export interface Personagem {
   vida: number;
   vidaMaxima: number;
   sucata: number;
-  premium: number;
   mortes: number;
   parede: number;
   podeRenascer: boolean;
@@ -118,11 +144,18 @@ async function pedir<T>(
   caminho: string,
   opcoes?: { metodo?: string; corpo?: unknown },
 ): Promise<T> {
+  const token = tokenGuardado();
   let resposta: Response;
   try {
     resposta = await fetch(`${BASE}${caminho}`, {
       method: opcoes?.metodo ?? "GET",
-      headers: opcoes?.corpo ? { "Content-Type": "application/json" } : {},
+      headers: {
+        ...(opcoes?.corpo ? { "Content-Type": "application/json" } : {}),
+        // No cabeçalho e não em cookie: o cliente é uma página estática
+        // noutra origem, e cookie de origem cruzada vira negociação com
+        // cada navegador. De quebra, elimina CSRF por construção.
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: opcoes?.corpo ? JSON.stringify(opcoes.corpo) : undefined,
     });
   } catch {
@@ -133,6 +166,9 @@ async function pedir<T>(
 
   const dados = await resposta.json().catch(() => ({}));
   if (!resposta.ok) {
+    // Sessão que caiu apaga o token guardado na hora. Sem isto a tela
+    // insistiria com uma credencial morta a cada carga.
+    if (resposta.status === 401) esquecerToken();
     throw new ErroDaApi(
       resposta.status,
       (dados as { erro?: string }).erro ?? `falha ${resposta.status}`,
@@ -141,8 +177,29 @@ async function pedir<T>(
   return dados as T;
 }
 
+export interface Entrada {
+  token: string;
+  conta: Conta;
+}
+
 export const api = {
   classes: () => pedir<{ raizes: { indice: number; nome: string }[] }>("/classes"),
+
+  cadastrar: (email: string, senha: string) =>
+    pedir<Entrada>("/contas", { metodo: "POST", corpo: { email, senha } }),
+
+  entrar: (email: string, senha: string) =>
+    pedir<Entrada>("/sessoes", { metodo: "POST", corpo: { email, senha } }),
+
+  sair: () => pedir<{ ok: boolean }>("/sessoes", { metodo: "DELETE" }),
+
+  /** Eu e meus personagens: a tela de slots inteira numa chamada. */
+  eu: () => pedir<{ conta: Conta; personagens: Personagem[] }>("/eu"),
+
+  comprarSlot: () => pedir<{ conta: Conta }>("/eu/slots", { metodo: "POST" }),
+
+  apagar: (id: string) =>
+    pedir<{ ok: boolean }>(`/personagens/${id}`, { metodo: "DELETE" }),
 
   criar: (nome: string, classe: number) =>
     pedir<Personagem>("/personagens", {
@@ -187,15 +244,16 @@ export const api = {
 };
 
 /**
- * O id guardado no navegador.
+ * O que fica guardado no navegador.
  *
- * É credencial provisória, e está assim de propósito até o sub-projeto 6:
- * quem tiver o id joga com o personagem. Serve para jogar localmente e não
- * para expor.
+ * Duas coisas, e são diferentes: o TOKEN é a credencial, e o id do
+ * personagem é só qual dos meus eu estava jogando. Antes o id era a
+ * credencial — quem o descobrisse jogava com ele. Agora ele não abre nada
+ * sozinho: o servidor confere se o personagem é da conta do token.
  */
-export function idGuardado(): string | null {
+function ler(chave: string): string | null {
   try {
-    return localStorage.getItem(CHAVE);
+    return localStorage.getItem(chave);
   } catch {
     // Aba anônima com armazenamento bloqueado: joga sem lembrar, em vez de
     // quebrar a tela inteira.
@@ -203,12 +261,36 @@ export function idGuardado(): string | null {
   }
 }
 
-export function guardarId(id: string): void {
+function escrever(chave: string, valor: string): void {
   try {
-    localStorage.setItem(CHAVE, id);
+    localStorage.setItem(chave, valor);
   } catch {
     /* segue sem lembrar */
   }
+}
+
+export function tokenGuardado(): string | null {
+  return ler(CHAVE_TOKEN);
+}
+
+export function guardarToken(token: string): void {
+  escrever(CHAVE_TOKEN, token);
+}
+
+export function esquecerToken(): void {
+  try {
+    localStorage.removeItem(CHAVE_TOKEN);
+  } catch {
+    /* nada a fazer */
+  }
+}
+
+export function idGuardado(): string | null {
+  return ler(CHAVE);
+}
+
+export function guardarId(id: string): void {
+  escrever(CHAVE, id);
 }
 
 export function esquecerId(): void {

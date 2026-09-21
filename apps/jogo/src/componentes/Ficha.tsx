@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, ErroDaApi, type Personagem } from "@/lib/api";
+import { api, type Conta, ErroDaApi, type Personagem } from "@/lib/api";
 import { n } from "@/lib/numero";
 import { PALETAS } from "@/lib/vitral";
 import { Vitral } from "./Vitral";
@@ -15,12 +15,17 @@ import { Vitral } from "./Vitral";
  */
 export function Ficha({
   p,
+  conta,
   aoAtualizar,
+  aoAtualizarConta,
   aoLutar,
   ocupado,
 }: {
   p: Personagem;
+  conta: Conta;
   aoAtualizar: (p: Personagem) => void;
+  /** O revive cobra da conta; a barra do herói precisa saber. */
+  aoAtualizarConta: () => void;
   aoLutar: (tipo: "comum" | "julgamento") => void;
   ocupado: boolean;
 }) {
@@ -32,6 +37,7 @@ export function Ficha({
     setErro(null);
     try {
       aoAtualizar(await acao());
+      aoAtualizarConta();
     } catch (e) {
       setErro(e instanceof ErroDaApi ? e.message : "não deu certo");
     }
@@ -146,20 +152,24 @@ export function Ficha({
         <div className="painel flex flex-col gap-4 p-6">
           <p className="titulo text-2xl">Você caiu num julgamento.</p>
           <p className="text-[0.9rem] leading-relaxed text-tinta-fraca">
-            O túmulo guarda tudo — nível, camada, classe e moedas voltam
-            intactos. A saída custa {p.custoDoRevive} de moeda premium, e não há
-            caminho por sucata.
+            O túmulo guarda tudo — nível, camada, classe e sucata voltam
+            intactos. A saída custa {n(p.custoDoRevive)} de moeda premium da
+            conta, e não há caminho por sucata.
           </p>
           <button
             type="button"
             onClick={() => tentar(() => api.reviver(p.id))}
-            disabled={p.premium < p.custoDoRevive}
-            className="botao self-start"
+            disabled={conta.premium < p.custoDoRevive}
+            className="botao botao-grande self-start"
           >
-            {p.premium < p.custoDoRevive
-              ? `faltam ${p.custoDoRevive - p.premium} de premium`
-              : `Reviver por ${p.custoDoRevive}`}
+            {conta.premium < p.custoDoRevive
+              ? `faltam ${n(p.custoDoRevive - conta.premium)} de premium`
+              : `Reviver por ${n(p.custoDoRevive)}`}
           </button>
+          <p className="text-[0.8rem] text-tinta-fraca">
+            Ou apague o personagem na prateleira e comece outro — a vaga
+            volta, as camadas não.
+          </p>
         </div>
       ) : (
         <>

@@ -35,7 +35,14 @@ const ATRIBUTO: Record<number, string> = {
  * O detalhe abre no hover porque cinco descrições abertas ao mesmo tempo
  * competem entre si; uma de cada vez é leitura, cinco é ruído.
  */
-export function Criacao({ aoCriar }: { aoCriar: (p: Personagem) => void }) {
+export function Criacao({
+  aoCriar,
+  aoVoltar,
+}: {
+  aoCriar: (p: Personagem) => void;
+  /** Ausente na primeira criação da conta: não há prateleira para voltar. */
+  aoVoltar?: () => void;
+}) {
   const [raizes, setRaizes] = useState<{ indice: number; nome: string }[]>([]);
   const [classe, setClasse] = useState<number | null>(null);
   const [sobre, setSobre] = useState<number | null>(null);
@@ -69,6 +76,16 @@ export function Criacao({ aoCriar }: { aoCriar: (p: Personagem) => void }) {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-[1400px] flex-col justify-center gap-10 px-4 py-12">
+      {aoVoltar && (
+        <button
+          type="button"
+          onClick={aoVoltar}
+          className="botao surge self-start"
+        >
+          Voltar aos personagens
+        </button>
+      )}
+
       <header className="surge text-center">
         <p className="rotulo">Chaos Trials</p>
         <h1 className="titulo mt-3 text-5xl leading-tight sm:text-6xl">
@@ -147,11 +164,15 @@ export function Criacao({ aoCriar }: { aoCriar: (p: Personagem) => void }) {
           <label className="flex flex-col gap-2">
             <span className="rotulo">Seu nome</span>
             <input
+              type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
               maxLength={24}
               placeholder="entre 2 e 24 letras"
-              className="painel px-4 py-3 text-[0.95rem] outline-none focus:border-ouro"
+              /* O mesmo campo da porta: afundado, borda de 2px. Antes era um
+                 `.painel`, e painel é onde a informação SAI — campo é onde
+                 ela entra, e as duas coisas não podem ter a mesma forma. */
+              className="campo"
             />
           </label>
 
@@ -161,7 +182,7 @@ export function Criacao({ aoCriar }: { aoCriar: (p: Personagem) => void }) {
             type="button"
             onClick={criar}
             disabled={nome.trim().length < 2 || enviando}
-            className="botao"
+            className="botao botao-grande justify-center"
           >
             {enviando ? "entrando…" : `Começar como ${escolhida.nome}`}
           </button>

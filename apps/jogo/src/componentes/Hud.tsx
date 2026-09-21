@@ -1,6 +1,6 @@
 "use client";
 
-import { type Personagem } from "@/lib/api";
+import { type Conta, type Personagem } from "@/lib/api";
 import { n } from "@/lib/numero";
 import { PALETAS } from "@/lib/vitral";
 import { Vitral } from "./Vitral";
@@ -22,11 +22,15 @@ import { Vitral } from "./Vitral";
  */
 export function Hud({
   p,
+  conta,
   aoAbrirArvore,
+  aoTrocar,
   travado,
 }: {
   p: Personagem;
+  conta: Conta;
   aoAbrirArvore: () => void;
+  aoTrocar: () => void;
   /** Em combate a árvore não abre: gastar ponto no meio da luta é trapaça. */
   travado: boolean;
 }) {
@@ -35,7 +39,18 @@ export function Hud({
 
   return (
     <header className="hud">
-      <Vitral classe={p.classe.indice} largura={34} aceso={!noTumulo} />
+      {/* O retrato é o caminho de volta à prateleira: é o objeto que
+          representa "este personagem", e clicar nele para trocar de
+          personagem é o gesto que a pessoa tenta primeiro. */}
+      <button
+        type="button"
+        onClick={aoTrocar}
+        disabled={travado}
+        title={travado ? "termine a luta primeiro" : "Trocar de personagem"}
+        className="hud-retrato"
+      >
+        <Vitral classe={p.classe.indice} largura={34} aceso={!noTumulo} />
+      </button>
 
       <div className="min-w-0 flex-1">
         <p className="hud-nome">{p.nome}</p>
@@ -54,8 +69,9 @@ export function Hud({
         <span className="rotulo">suc</span>
       </span>
 
-      <span className="hud-moeda hud-moeda-ouro" title="Moeda premium">
-        <strong>{n(p.premium)}</strong>
+      {/* Da CONTA, e não do personagem: moeda comprada não morre junto. */}
+      <span className="hud-moeda hud-moeda-ouro" title="Moeda premium da conta">
+        <strong>{n(conta.premium)}</strong>
         <span className="rotulo">prm</span>
       </span>
 

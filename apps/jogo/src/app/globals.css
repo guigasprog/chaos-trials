@@ -570,6 +570,116 @@ body {
   transform: translateY(5px);
 }
 
+/* ══════════════════ Campo de formulário ══════════════════ */
+/*
+ * Fundo afundado e borda de 2px, como as barras: campo de texto é onde a
+ * pessoa PÕE coisa, e afundado é a forma que diz isso sem rótulo.
+ */
+.campo {
+  padding: 0.7rem 0.9rem;
+  border: 2px solid var(--color-borda);
+  background: rgba(8, 6, 14, 0.7);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6);
+  color: var(--color-tinta);
+  font-size: 0.95rem;
+  transition: border-color 160ms, box-shadow 160ms;
+}
+.campo::placeholder { color: rgba(154, 145, 176, 0.55); }
+.campo:focus {
+  outline: none;
+  border-color: var(--color-ouro);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), 0 0 0 3px rgba(217, 164, 65, 0.16);
+}
+/* O autopreenchimento do Chrome pinta o campo de branco e apaga o texto
+   claro. Sem isto, a senha salva fica invisível sobre fundo branco. */
+.campo:-webkit-autofill,
+.campo:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-tinta);
+  -webkit-box-shadow: 0 0 0 1000px #120f1d inset;
+}
+
+/* ══════════════════ Slots de personagem ══════════════════ */
+/*
+ * Três estados na MESMA célula da grade: ocupado, vago e fechado. É assim
+ * que se lê "tenho dois e posso ter mais" de relance — uma lista só dos que
+ * existem não conta a segunda metade.
+ */
+.slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 11rem;
+  padding: 1rem;
+  border: 2px solid var(--color-borda);
+  border-top-color: rgba(240, 203, 132, 0.25);
+  background: linear-gradient(180deg, rgba(30, 25, 46, 0.85), rgba(10, 8, 16, 0.95));
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.55);
+  transition: border-color 160ms, transform 90ms, box-shadow 90ms;
+}
+.slot-abrir {
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+  flex: 1;
+  text-align: left;
+}
+.slot:hover { border-color: var(--color-ouro); }
+
+/* O túmulo não se esconde: é um personagem que existe e guarda tudo. */
+.slot-tumulo {
+  border-color: rgba(200, 55, 43, 0.45);
+  background: linear-gradient(180deg, rgba(61, 12, 10, 0.5), rgba(10, 8, 16, 0.96));
+}
+.slot-tumulo:hover { border-color: var(--color-sangue); }
+
+.slot-apagar {
+  align-self: flex-start;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid transparent;
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-tinta-fraca);
+  transition: color 160ms, border-color 160ms;
+}
+.slot-apagar:hover { color: #f0938a; border-color: rgba(200, 55, 43, 0.5); }
+.slot-apagar-armado {
+  color: #f0938a;
+  border-color: var(--color-sangue);
+  background: rgba(200, 55, 43, 0.12);
+}
+
+.slot-vago,
+.slot-fechado {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.slot-vago {
+  border-style: dashed;
+  background: rgba(20, 16, 31, 0.4);
+  box-shadow: none;
+}
+.slot-vago:active { transform: translateY(3px); }
+.slot-cruz {
+  font-size: 2.4rem;
+  line-height: 1;
+  color: var(--color-tinta-fraca);
+}
+.slot-vago:hover .slot-cruz { color: var(--color-ouro); }
+
+/* Fechado não é apagado: o preço é o conteúdo do cartão. */
+.slot-fechado {
+  border-color: rgba(217, 164, 65, 0.35);
+  background: linear-gradient(180deg, rgba(217, 164, 65, 0.07), rgba(10, 8, 16, 0.95));
+}
+.slot-cadeado {
+  font-size: 1.8rem;
+  line-height: 1;
+  color: var(--color-ouro);
+}
+
 /* ══════════════════ A barra do herói ══════════════════ */
 /*
  * Grudada no topo, em todas as telas. A borda de baixo mais grossa que as
@@ -591,6 +701,15 @@ body {
   backdrop-filter: blur(6px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
 }
+.hud-retrato {
+  flex: none;
+  line-height: 0;
+  border: 2px solid transparent;
+  transition: border-color 160ms;
+}
+.hud-retrato:not(:disabled):hover { border-color: var(--color-ouro); }
+.hud-retrato:disabled { cursor: not-allowed; }
+
 .hud-nome {
   font-family: var(--font-titulo);
   font-size: 1.25rem;

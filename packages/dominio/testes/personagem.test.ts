@@ -45,7 +45,8 @@ describe("criação", () => {
     assert.equal(p.estado, "vivo");
     assert.equal(p.vida, vidaMaximaDe(p));
     assert.equal(p.sucata, 0);
-    assert.equal(p.premium, 0);
+    // Moeda premium NÃO fica aqui: é da conta, e sobrevive ao permadeath.
+    assert.equal("premium" in p, false);
   });
 
   it("só se começa numa das cinco raízes", () => {
@@ -163,16 +164,17 @@ describe("morte e túmulo", () => {
   it("sem moeda premium não há saída do túmulo", () => {
     // Decisão de produto: NÃO existe caminho por sucata, por mais sucata que
     // se tenha.
-    const morto = { ...morrer(novo()), sucata: 1e9, premium: 0 };
-    assert.throws(() => reviver(morto), /revive custa/);
+    const morto = { ...morrer(novo()), sucata: 1e9 };
+    assert.throws(() => reviver(morto, 0), /revive custa/);
   });
 
-  it("com moeda premium sai do túmulo, e a moeda é cobrada", () => {
-    const morto = { ...morrer(novo()), premium: custoDoRevive() + 10 };
-    const { personagem, pagou } = reviver(morto);
+  it("com moeda premium NA CONTA sai do túmulo, e diz quanto cobrar", () => {
+    // O saldo entra por parâmetro e o débito sai no retorno: a moeda é da
+    // conta, e quem debita é quem tem a conta na mão. Aqui só se decide se
+    // pode e quanto custa.
+    const { personagem, pagou } = reviver(morrer(novo()), custoDoRevive() + 10);
     assert.equal(personagem.estado, "vivo");
     assert.equal(pagou, custoDoRevive());
-    assert.equal(personagem.premium, 10);
     assert.ok(personagem.vida > 0);
   });
 
@@ -181,10 +183,9 @@ describe("morte e túmulo", () => {
       ...noNivel(57),
       camada: 12,
       sucata: 4321,
-      premium: custoDoRevive(),
       classe: 41,
     };
-    const { personagem } = reviver(morrer(antes));
+    const { personagem } = reviver(morrer(antes), custoDoRevive());
     assert.equal(personagem.nivel, 57);
     assert.equal(personagem.camada, 12);
     assert.equal(personagem.classe, 41);
@@ -192,7 +193,7 @@ describe("morte e túmulo", () => {
   });
 
   it("não se revive quem está vivo", () => {
-    assert.throws(() => reviver(novo()), /túmulo/);
+    assert.throws(() => reviver(novo(), 1e9), /túmulo/);
   });
 });
 
@@ -213,15 +214,11 @@ describe("renascimento", () => {
     assert.equal(p.vida, vidaMaximaDe(p));
   });
 
-  it("preserva as moedas — elas são da conta, não da vida", () => {
-    const rico = {
-      ...noNivel(Math.ceil(nivelDaParede(0))),
-      sucata: 900,
-      premium: 50,
-    };
-    const p = renascer(rico, 3);
-    assert.equal(p.sucata, 900);
-    assert.equal(p.premium, 50);
+  it("preserva a sucata — renascer é continuar, não recomeçar do zero", () => {
+    // A moeda premium nem passa por aqui: ela é da conta, e renascer não
+    // toca a conta.
+    const rico = { ...noNivel(Math.ceil(nivelDaParede(0))), sucata: 900 };
+    assert.equal(renascer(rico, 3).sucata, 900);
   });
 
   it("a parede da camada nova está mais longe", () => {

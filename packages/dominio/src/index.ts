@@ -8,5 +8,10 @@ export * from "./efeitos.ts";
 export * from "./habilidades.ts";
 export * from "./batalha.ts";
 export * from "./personagem.ts";
-export { PREMIO_DO_JULGAMENTO } from "./balanceamento.ts";
+export {
+  PREMIO_DO_JULGAMENTO,
+  SLOTS_GRATIS,
+  SLOTS_MAXIMO,
+} from "./balanceamento.ts";
 export * from "./arvore.ts";
+export * from "./conta.ts";

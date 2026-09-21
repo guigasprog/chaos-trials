@@ -1,7 +1,7 @@
-import { caminhoPadrao, emArquivo } from "./armazenamento.ts";
+import { emArquivo, pastaPadrao } from "./armazenamento.ts";
 import { criarAplicacao } from "./aplicacao.ts";
 
-/** Sobe o servidor. `CHAOS_PORTA` e `CHAOS_DADOS` ajustam porta e arquivo. */
+/** Sobe o servidor. `CHAOS_PORTA` e `CHAOS_DADOS` ajustam porta e pasta. */
 const porta = Number(process.env.CHAOS_PORTA ?? 3333);
 /** `CHAOS_ORIGENS` separa por vírgula; vazio libera tudo, para desenvolver. */
 const origens = (process.env.CHAOS_ORIGENS ?? "")
@@ -10,7 +10,7 @@ const origens = (process.env.CHAOS_ORIGENS ?? "")
   .filter(Boolean);
 
 const app = criarAplicacao({
-  armazenamento: emArquivo(caminhoPadrao()),
+  armazenamento: emArquivo(pastaPadrao()),
   log: true,
   origens,
 });

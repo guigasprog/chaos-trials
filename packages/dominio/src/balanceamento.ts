@@ -178,3 +178,30 @@ export const VIDA_APOS_RECUAR = 0.7;
 /** Preço do revive em moeda premium. Personagem no túmulo não rende nada e é
  *  preservado indefinidamente. */
 export const PRECO_REVIVE = 250;
+
+// ── Conta e slots ────────────────────────────────────────────────────────
+
+/**
+ * Quantos personagens a conta tem sem pagar nada.
+ *
+ * Dois, e não um: com um só, perder o personagem para o permadeath encerra
+ * a conta até alguém pagar, e o jogo passa a cobrar para continuar
+ * existindo. Com dois, sempre há uma segunda vida possível de graça, e o
+ * que se compra é conveniência — não acesso.
+ */
+export const SLOTS_GRATIS = 2;
+
+/** Preço do terceiro slot, em moeda premium. */
+export const PRECO_DO_PRIMEIRO_SLOT = 300;
+
+/**
+ * Quanto o slot seguinte custa a mais que o anterior.
+ *
+ * Slot é permanente, não consumo. A preço fixo, ter vinte personagens vira
+ * gasto trivial e a decisão de qual manter — que é o que dá peso ao
+ * permadeath — desaparece. Em 1,6 o décimo slot custa cerca de 8.200.
+ */
+export const PRECO_DO_SLOT_CRESCE = 1.6;
+
+/** Teto de slots. Existe para a tela caber e para o preço não virar piada. */
+export const SLOTS_MAXIMO = 10;

@@ -1,9 +1,15 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import type { FastifyInstance } from "fastify";
-import { nivelDaParede, vidaMaximaDe, type Personagem } from "@chaos/dominio";
+import type { FastifyInstance, InjectOptions } from "fastify";
+import {
+  type Conta,
+  nivelDaParede,
+  vidaMaximaDe,
+  type Personagem,
+} from "@chaos/dominio";
 import { criarAplicacao } from "../src/aplicacao.ts";
 import { emMemoria } from "../src/armazenamento.ts";
+import { Sessoes } from "../src/sessoes.ts";
 
 /**
  * Exercita a API inteira, sem rede e sem banco.
@@ -16,20 +22,79 @@ import { emMemoria } from "../src/armazenamento.ts";
 const AGORA = 1_700_000_000_000;
 const HORA = 3_600_000;
 
-let app: FastifyInstance;
+let app: Bancada;
 let relogio = AGORA;
 let guardados: Personagem[] = [];
 
-function montar(inicial: readonly Personagem[] = []) {
+/**
+ * Um servidor montado com uma conta já dentro e uma sessão já aberta.
+ *
+ * `inject` acrescenta o `Authorization` sozinho, porque toda rota de jogo
+ * exige sessão e repetir o cabeçalho em sessenta chamadas esconderia o que
+ * cada teste está de fato verificando. Quem quer testar SEM sessão passa
+ * `anonimo: true`, e é o único lugar onde isso aparece.
+ */
+/** O que `inject` devolve, sem depender do nome do tipo em `light-my-request`. */
+type Resposta = Awaited<ReturnType<FastifyInstance["inject"]>>;
+
+interface Bancada {
+  inject(
+    opcoes: InjectOptions & { anonimo?: boolean; token?: string },
+  ): Promise<Resposta>;
+  close(): Promise<void>;
+  readonly cru: FastifyInstance;
+  readonly token: string;
+  readonly contaId: string;
+  readonly sessoes: Sessoes;
+}
+
+function montar(inicial: readonly Personagem[] = [], premium = 0): Bancada {
   relogio = AGORA;
-  const armazenamento = emMemoria(inicial);
+  const sessoes = new Sessoes();
+  const contaId = "conta-de-teste";
+  const conta: Conta = {
+    id: contaId,
+    email: "teste@chaos.local",
+    // A senha não é exercitada por aqui: a sessão é aberta direto. Os testes
+    // de cadastro e entrada usam contas próprias, criadas pela rota.
+    senha: "(sem hash — sessão aberta direto)",
+    criadaEm: AGORA,
+    visto: AGORA,
+    premium,
+    // Folga de slots: estes testes criam personagens à vontade, e o limite
+    // tem teste próprio.
+    slotsComprados: 98,
+    personagens: inicial.map((p) => p.id),
+  };
+
+  const armazenamento = emMemoria(inicial, [conta]);
   // Espia o que foi gravado, para conferir que o servidor persiste de fato.
-  const original = armazenamento.salvar;
-  armazenamento.salvar = async (p) => {
+  const original = armazenamento.personagens.salvar;
+  armazenamento.personagens.salvar = async (p) => {
     guardados.push(structuredClone(p));
     return original(p);
   };
-  return criarAplicacao({ armazenamento, agora: () => relogio });
+
+  const cru = criarAplicacao({ armazenamento, agora: () => relogio, sessoes });
+  const token = sessoes.abrir(contaId, AGORA);
+
+  return {
+    inject({ anonimo, token: outro, ...opcoes }) {
+      if (anonimo) return cru.inject(opcoes);
+      return cru.inject({
+        ...opcoes,
+        headers: {
+          ...(opcoes.headers ?? {}),
+          authorization: `Bearer ${outro ?? token}`,
+        },
+      });
+    },
+    close: () => cru.close(),
+    cru,
+    token,
+    contaId,
+    sessoes,
+  };
 }
 
 before(() => {
@@ -188,7 +253,7 @@ describe("comum contra julgamento", () => {
     // pago, isso é extração, não dificuldade.
     const fraco: Personagem = {
       id: "fraco", nome: "Fraco", classe: 4, nivel: 1500, xp: 0, camada: 0,
-      estado: "vivo", vida: 5000, visto: AGORA, sucata: 0, premium: 0, mortes: 0, gastos: {},
+      estado: "vivo", vida: 5000, visto: AGORA, sucata: 0, mortes: 0, gastos: {},
     };
     const local = montar([fraco]);
 
@@ -232,7 +297,7 @@ describe("comum contra julgamento", () => {
     const condenado: Personagem = {
       id: "condenado", nome: "Condenado", classe: 4, nivel: 1500, xp: 0,
       camada: 0, estado: "vivo", vida: 5000, visto: AGORA, sucata: 0,
-      premium: 0, mortes: 0, gastos: {},
+      mortes: 0, gastos: {},
     };
     const local = montar([condenado]);
 
@@ -272,7 +337,7 @@ describe("túmulo e revive", () => {
     vida: 0,
     visto: AGORA,
     sucata: 10_000,
-    premium: 0,
+    
     mortes: 1,
       gastos: {},
   });
@@ -296,14 +361,19 @@ describe("túmulo e revive", () => {
     await local.close();
   });
 
-  it("com premium, sai do túmulo e a moeda é cobrada", async () => {
-    const local = montar([{ ...morto(), premium: 500 }]);
+  it("com premium NA CONTA, sai do túmulo e a moeda é cobrada", async () => {
+    // A moeda é da conta e não do personagem: comprada com dinheiro de
+    // verdade, ela não pode evaporar no permadeath — e é justamente o que
+    // torna o revive possível, já que quem está no túmulo não tem nada.
+    const local = montar([morto()], 500);
     const r = await local.inject({ method: "POST", url: "/personagens/morto/reviver" });
     assert.equal(r.statusCode, 200, r.body);
     const p = r.json();
     assert.equal(p.estado, "vivo");
-    assert.equal(p.premium, 500 - p.custoDoRevive);
     assert.ok(p.vida > 0);
+
+    const eu = (await local.inject({ method: "GET", url: "/eu" })).json();
+    assert.equal(eu.conta.premium, 500 - p.custoDoRevive);
     await local.close();
   });
 
@@ -312,7 +382,7 @@ describe("túmulo e revive", () => {
     const local = montar([morto()]);
     const r = await local.inject({
       method: "POST",
-      url: "/personagens/morto/creditar",
+      url: "/eu/creditar",
       payload: { quantidade: 1e9 },
     });
     assert.equal(r.statusCode, 403);
@@ -336,7 +406,7 @@ describe("progressão offline", () => {
         vida: vidaMaximaDe({ classe: 4, nivel: 25 } as Personagem),
         visto: AGORA,
         sucata: 0,
-        premium: 0,
+        
         mortes: 0,
       gastos: {},
       },
@@ -364,7 +434,7 @@ describe("progressão offline", () => {
         vida: 900,
         visto: AGORA,
         sucata: 0,
-        premium: 0,
+        
         mortes: 0,
       gastos: {},
       },
@@ -392,7 +462,7 @@ describe("renascimento", () => {
       vida: 500,
       visto: AGORA,
       sucata: 77,
-      premium: 0,
+      
       mortes: 0, gastos: {},
     };
 
@@ -477,7 +547,7 @@ describe("árvore de habilidade", () => {
     const veterano: Personagem = {
       // `Gume` exige `Vocação` antes; o tronco já comprado é o cenário real.
       id: "vet", nome: "Vet", classe: 4, nivel: 40, xp: 0, camada: 0,
-      estado: "vivo", vida: 500, visto: AGORA, sucata: 0, premium: 0,
+      estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
       mortes: 0, gastos: { raiz: 1 },
     };
     const local = montar([veterano]);
@@ -500,7 +570,7 @@ describe("árvore de habilidade", () => {
     // sem o jogador saber.
     const veterano: Personagem = {
       id: "mago", nome: "Mago", classe: 4, nivel: 40, xp: 0, camada: 0,
-      estado: "vivo", vida: 500, visto: AGORA, sucata: 0, premium: 0,
+      estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
       mortes: 0, gastos: { raiz: 1, gume: 1 },
     };
     const local = montar([veterano]);
@@ -517,7 +587,7 @@ describe("árvore de habilidade", () => {
   it("recusa nó sem requisito, dizendo o que falta", async () => {
     const veterano: Personagem = {
       id: "afoito", nome: "Afoito", classe: 4, nivel: 40, xp: 0, camada: 0,
-      estado: "vivo", vida: 500, visto: AGORA, sucata: 0, premium: 0,
+      estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
       mortes: 0, gastos: {},
     };
     const local = montar([veterano]);
@@ -535,7 +605,7 @@ describe("árvore de habilidade", () => {
     const pronto: Personagem = {
       id: "renasce", nome: "Renasce", classe: 4, nivel: naParede, xp: 0,
       camada: 0, estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
-      premium: 0, mortes: 0, gastos: { raiz: 5, gume: 3 },
+      mortes: 0, gastos: { raiz: 5, gume: 3 },
     };
     const local = montar([pronto]);
     const r = await local.inject({
