@@ -178,6 +178,8 @@ body {
 .lamina-conteudo {
   position: absolute;
   inset: auto 0 0 0;
+  /* Acima da ilustração, que entra como camada absoluta dentro da lâmina. */
+  z-index: 2;
   display: block;
   /* Recuo à esquerda proporcional ao corte: encostado na borda, o texto
      cairia fora da diagonal e apareceria cortado pela metade. */

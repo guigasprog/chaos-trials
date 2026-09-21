@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api, ErroDaApi, type Personagem } from "@/lib/api";
-import { PALETAS, vitralComoUrl } from "@/lib/vitral";
+import { PALETAS } from "@/lib/vitral";
+import { ArteDaClasse, vitralComoUrl } from "./Vitral";
 
 /** O que cada raiz é, em uma frase — a escolha precisa significar algo. */
 const ESSENCIA: Record<number, string> = {
@@ -115,8 +116,11 @@ export function Criacao({ aoCriar }: { aoCriar: (p: Personagem) => void }) {
                   } as React.CSSProperties
                 }
               >
-                {/* Contra-inclinado: sem isto o texto sairia torto junto com a
-                    lâmina, e o corte diagonal é forte demais para ler assim. */}
+                {/* A ilustração, quando existe. O vitral gerado fica no
+                    `background` por baixo, e aparece sozinho quando não há
+                    arquivo — ver public/classes/LEIA-ME.md. */}
+                <ArteDaClasse classe={r.indice} />
+
                 <span className="lamina-conteudo">
                   <span className="titulo text-3xl leading-none">{r.nome}</span>
 

@@ -36,6 +36,14 @@ As 45 saem do próprio índice: paleta pelo ramo raiz, riqueza pela
 profundidade. Cada uma é única sem 45 ilustrações à mão, pesa quilobytes e
 escala em qualquer tamanho.
 
+### Trocar por ilustração
+
+O vitral gerado é a base, não o teto. Solte `public/classes/<índice>.webp` —
+`4.webp` para Melee — e aquela classe passa a usar a imagem. Sem registro para
+atualizar, sem código para mexer: o que manda é o arquivo existir, e sem ele
+vale o gerado. Detalhes de formato e de origem em
+`apps/jogo/public/classes/LEIA-ME.md`.
+
 Também dá para jogar sem tela nenhuma, por HTTP:
 
 ```bash
