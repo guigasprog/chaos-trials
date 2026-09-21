@@ -526,6 +526,66 @@ describe("origem cruzada", () => {
   });
 });
 
+describe("corpo vazio com Content-Type: application/json", () => {
+  /*
+   * Achado testando de verdade, não escrevendo teste: `POST
+   * /personagens/:id/pocao` sem corpo nenhum, mas com o cabeçalho
+   * `Content-Type: application/json` (que é o hábito mais comum de
+   * cliente HTTP, `fetch` puro incluído), dava 400 do próprio Fastify —
+   * `FST_ERR_CTP_EMPTY_JSON_BODY` — antes mesmo de a rota rodar.
+   *
+   * O cliente deste repositório escapa disso por cuidado em `pedir()`,
+   * que só manda o cabeçalho quando há corpo de verdade. Mas seis rotas
+   * não esperam corpo nenhum (poção, reviver, sair da conta, apagar
+   * personagem, comprar slot, retirar anúncio), e qualquer OUTRO
+   * consumidor da API — outro cliente, um script, Postman — que mande o
+   * cabeçalho por hábito cai nisso na primeira tentativa. Foi assim que
+   * apareceu.
+   *
+   * Cada afirmação abaixo é `statusCode !== 400` E que o erro, quando
+   * há um, é o nosso (`erro: "..."`) e não o do framework — prova que a
+   * requisição atravessou o parser e chegou à regra de negócio.
+   */
+  it("uma rota sem corpo aceita Content-Type: application/json vazio", async () => {
+    const p = await criar();
+    const r = await app.inject({
+      method: "POST",
+      url: `/personagens/${p.id}/pocao`,
+      headers: { "content-type": "application/json" },
+    });
+    assert.notEqual(r.statusCode, 400, r.body);
+    // Personagem recém-criado está com a vida cheia: se a rota rodou de
+    // verdade, o motivo do 409 é O NOSSO, não o do Fastify.
+    assert.match(r.json().erro, /vida já está cheia/);
+  });
+
+  it("também aceita corpo vazio noutra rota sem corpo (comprar slot)", async () => {
+    const r = await app.inject({
+      method: "POST",
+      url: "/eu/slots",
+      headers: { "content-type": "application/json" },
+    });
+    assert.notEqual(r.statusCode, 400, r.body);
+    // A conta de teste tem folga de slots de propósito (98 comprados, ver
+    // `montar`), então o motivo do 409 aqui é o teto, não o preço — mas
+    // continua sendo O NOSSO 409, não o `FST_ERR_CTP_EMPTY_JSON_BODY` do
+    // Fastify, que é o que este teste prova.
+    assert.match(r.json().erro, /máximo/);
+  });
+
+  it("corpo malformado continua sendo recusado", async () => {
+    // O parser fica tolerante com VAZIO, não com qualquer coisa: JSON
+    // quebrado precisa continuar dando erro, e não virar `{}` em silêncio.
+    const r = await app.inject({
+      method: "POST",
+      url: "/personagens",
+      headers: { "content-type": "application/json" },
+      payload: "{ isto não é json",
+    });
+    assert.equal(r.statusCode, 400);
+  });
+});
+
 describe("árvore de habilidade", () => {
   it("o personagem novo tem pontos zerados e nenhum nó comprado", async () => {
     const p = await criar();

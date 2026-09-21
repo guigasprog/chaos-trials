@@ -40,6 +40,7 @@ import {
   POCAO_EM_VITORIAS,
   POCAO_PRECO_MINIMO,
   PRECO_REVIVE,
+  SUCATA_INICIAL,
   VIDA_APOS_RECUAR,
 } from "./balanceamento.ts";
 import { habilidadesDe } from "./habilidades.ts";
@@ -118,7 +119,7 @@ export function criarPersonagem(dados: {
     estado: "vivo",
     vida: vidaMaxima(atributosDe(dados.classeRaiz, 1)),
     visto: dados.agora,
-    sucata: 0,
+    sucata: SUCATA_INICIAL,
     mortes: 0,
     gastos: zerar(),
     equipado: {},

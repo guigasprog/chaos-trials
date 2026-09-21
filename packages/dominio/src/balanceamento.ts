@@ -277,6 +277,44 @@ export const DESCANSO_POR_HORA = 0.3;
  */
 export const OFFLINE_DESCANSA_ABAIXO_DE = 0.55;
 
+/**
+ * Sucata com que todo personagem NASCE.
+ *
+ * Achado jogando de verdade, não simulando: toda medição anterior do
+ * laço poção/descanso começava com "duas vitórias de sucata" — nunca com
+ * ZERO, que é onde um personagem recém-criado realmente está. Um
+ * playtest de ponta a ponta bateu nisso na hora: um personagem novo
+ * perde uma luta cedo, fica sem sucata para a poção seguinte, e trava —
+ * a única saída é esperar de verdade.
+ *
+ * Medido em `scripts/arranque-frio-golpe.ts`, simulando o estilo de jogo
+ * mais comum e mais desfavorável — sempre a habilidade sem espera, nunca
+ * a de recarga —, porque é exatamente o que um jogador sem experiência
+ * faz:
+ *
+ *   sucata inicial | presos nas primeiras 15 ações | espera mediana
+ *              0   | 33,7%                         | 1,1h
+ *              5   |  5,1%                         | 1,1h
+ *             10   |  0,1%                         | 1,1h
+ *             15   |  0,0%                         | —
+ *
+ * 15 zera o pior momento — o primeiro encontro com a mecânica, que é
+ * onde travar dói mais. NÃO elimina o problema de vez: o mesmo estilo
+ * "só a habilidade sem espera", numa janela de 40 ações, ainda trava
+ * 13,5% das vezes mesmo com este presente — porque nunca rodar a
+ * habilidade de recarga é uma escolha de jogo estruturalmente mais fraca
+ * a qualquer nível, e nenhuma sucata inicial resolve isso para sempre.
+ * Essa parte fica **EM ABERTO**: corrigi-la de verdade é rebalancear
+ * combate no nível 1, e isso está fora do que uma constante isolada
+ * decide com segurança — ver o README.
+ *
+ * Não fere a economia fechada: essa invariante — moeda nunca criada do
+ * nada — é da moeda PREMIUM, comprada com dinheiro de verdade. Sucata já
+ * é descrita em `mercado.ts` como "infinitamente farmável"; um presente
+ * de partida é só o primeiro farm adiantado.
+ */
+export const SUCATA_INICIAL = 15;
+
 // ── Arena (PvP) ──────────────────────────────────────────────────────────
 
 /** Onde todo mundo começa. 1.000 é a convenção, e convenção tem valor. */

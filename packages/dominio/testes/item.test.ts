@@ -242,13 +242,16 @@ describe("mochila e encaixes", () => {
   });
 
   it("desmanchar troca a peça por sucata", () => {
+    const base = novo();
     const peca = item(1, { raridade: "vitral" });
-    const p = guardarItem(novo(), peca);
+    const p = guardarItem(base, peca);
     const { personagem, sucata } = desmanchar(p, peca.id);
     assert.equal(sucata, precoDeDesmanche(peca));
     assert.ok(sucata > 0);
     assert.equal(personagem.mochila.length, 0);
-    assert.equal(personagem.sucata, sucata);
+    // Soma à sucata que já havia — não substitui. `base.sucata` é o
+    // presente de partida (`SUCATA_INICIAL`), não zero.
+    assert.equal(personagem.sucata, base.sucata + sucata);
   });
 
   it("não se desmancha o que está vestido — tem de sair do corpo antes", () => {

@@ -81,61 +81,73 @@ export function Hud({
         <span className="rotulo">prm</span>
       </span>
 
-      {/* O ponto parado é a coisa mais fácil de esquecer que se tem, e aqui
-          ele aparece mesmo quando a pessoa está em outra tela. */}
-      <button
-        type="button"
-        onClick={aoAbrirArvore}
-        disabled={travado}
-        className={`hud-arvore ${p.arvore.pontos > 0 ? "hud-arvore-cheia" : ""}`}
-        title={
-          travado
-            ? "a árvore não abre no meio de uma luta"
-            : "Árvore de habilidade"
-        }
-      >
-        Árvore
-        {p.arvore.pontos > 0 && (
-          <span className="hud-pontos">{p.arvore.pontos}</span>
-        )}
-      </button>
+      {/*
+       * As quatro ações num grupo à parte, de propósito.
+       *
+       * Com árvore, mochila, mercado e arena, a barra parou de caber numa
+       * linha só de telefone — um playtest de ponta a ponta pegou a tela
+       * inteira ganhando rolagem lateral, coisa que nenhum teste de API
+       * detectaria. `.hud-acoes` quebra para a própria linha no telefone
+       * (`flex-wrap` no pai) e, se mesmo assim faltar espaço num aparelho
+       * bem estreito, rola por dentro de si mesma — nunca a página inteira.
+       */}
+      <nav className="hud-acoes">
+        {/* O ponto parado é a coisa mais fácil de esquecer que se tem, e
+            aqui ele aparece mesmo quando a pessoa está em outra tela. */}
+        <button
+          type="button"
+          onClick={aoAbrirArvore}
+          disabled={travado}
+          className={`hud-arvore ${p.arvore.pontos > 0 ? "hud-arvore-cheia" : ""}`}
+          title={
+            travado
+              ? "a árvore não abre no meio de uma luta"
+              : "Árvore de habilidade"
+          }
+        >
+          Árvore
+          {p.arvore.pontos > 0 && (
+            <span className="hud-pontos">{p.arvore.pontos}</span>
+          )}
+        </button>
 
-      <button
-        type="button"
-        onClick={aoAbrirItens}
-        disabled={travado}
-        className="hud-arvore"
-        title={
-          travado ? "a mochila não abre no meio de uma luta" : "Equipamento"
-        }
-      >
-        Mochila
-        {/* O número só aparece quando a mochila está cheia: aí ele é um
-            aviso, e não decoração — o que cair vira sucata sozinho. */}
-        {p.mochila.length >= p.mochilaMaxima && (
-          <span className="hud-pontos hud-pontos-cheio">cheia</span>
-        )}
-      </button>
+        <button
+          type="button"
+          onClick={aoAbrirItens}
+          disabled={travado}
+          className="hud-arvore"
+          title={
+            travado ? "a mochila não abre no meio de uma luta" : "Equipamento"
+          }
+        >
+          Mochila
+          {/* O número só aparece quando a mochila está cheia: aí ele é um
+              aviso, e não decoração — o que cair vira sucata sozinho. */}
+          {p.mochila.length >= p.mochilaMaxima && (
+            <span className="hud-pontos hud-pontos-cheio">cheia</span>
+          )}
+        </button>
 
-      <button
-        type="button"
-        onClick={aoAbrirMercado}
-        disabled={travado}
-        className="hud-arvore"
-        title={travado ? "o mercado não abre no meio de uma luta" : "Mercado"}
-      >
-        Mercado
-      </button>
+        <button
+          type="button"
+          onClick={aoAbrirMercado}
+          disabled={travado}
+          className="hud-arvore"
+          title={travado ? "o mercado não abre no meio de uma luta" : "Mercado"}
+        >
+          Mercado
+        </button>
 
-      <button
-        type="button"
-        onClick={aoAbrirArena}
-        disabled={travado}
-        className="hud-arvore"
-        title={travado ? "a arena não abre no meio de uma luta" : "Arena"}
-      >
-        Arena
-      </button>
+        <button
+          type="button"
+          onClick={aoAbrirArena}
+          disabled={travado}
+          className="hud-arvore"
+          title={travado ? "a arena não abre no meio de uma luta" : "Arena"}
+        >
+          Arena
+        </button>
+      </nav>
     </header>
   );
 }

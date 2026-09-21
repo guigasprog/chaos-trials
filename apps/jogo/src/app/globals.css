@@ -985,16 +985,46 @@ body {
 }
 
 /*
- * No telefone tudo briga pela mesma linha. O que sai é o nome da classe —
- * é a única coisa ali que a pessoa já sabe. O botão da árvore encolhe mas
- * mantém a palavra: botão só com número não diz o que faz.
+ * As quatro ações como um grupo, para poderem quebrar juntas.
+ *
+ * Isoladas em `.hud-acoes`, e não soltas como filhas diretas de `.hud`:
+ * um grupo tem largura própria que o CSS consegue jogar para a linha de
+ * baixo inteiro, e um botão solto não tem.
+ */
+.hud-acoes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/*
+ * No telefone tudo briga pela mesma linha. O que sai primeiro é o nome
+ * da classe — é a única coisa ali que a pessoa já sabe.
+ *
+ * Encolher fonte não bastou quando as ações eram quatro: um playtest de
+ * ponta a ponta mostrou a barra INTEIRA empurrando a página para o lado
+ * num telefone de 390px — o quinto botão (Arena) simplesmente vazava.
+ * Agora `.hud-acoes` quebra para a própria linha (`flex-wrap` no pai +
+ * `flex-basis: 100%` nela), com folga de sobra para os quatro nomes
+ * inteiros. `overflow-x: auto` fica como rede de segurança para um
+ * aparelho ainda mais estreito — rolagem DENTRO da faixa de ações, nunca
+ * da página.
  */
 @media (max-width: 560px) {
-  .hud { gap: 0.55rem; padding: 0.5rem 0.65rem; }
+  .hud { flex-wrap: wrap; gap: 0.5rem 0.55rem; padding: 0.5rem 0.65rem; }
   .hud-nome { font-size: 1rem; }
   .hud-classe { display: none; }
   .hud-moeda > strong { font-size: 1rem; }
-  .hud-arvore { padding: 0.4rem 0.5rem; font-size: 0.64rem; gap: 0.3rem; }
+  .hud-acoes {
+    flex-basis: 100%;
+    gap: 0.4rem;
+    overflow-x: auto;
+    /* Sem barra de rolagem visível: ela é a rede de segurança, não o
+       convite — o normal é os quatro caberem sem rolar nada. */
+    scrollbar-width: none;
+  }
+  .hud-acoes::-webkit-scrollbar { display: none; }
+  .hud-arvore { padding: 0.4rem 0.5rem; font-size: 0.64rem; gap: 0.3rem; flex: none; }
 }
 
 /* ══════════════════ O golpe que se sente ══════════════════ */

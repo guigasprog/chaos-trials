@@ -307,6 +307,41 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     origin: opcoes.origens && opcoes.origens.length > 0 ? [...opcoes.origens] : true,
   });
 
+  /*
+   * Corpo JSON vazio não é erro.
+   *
+   * Achado testando de verdade: `POST /personagens/:id/pocao` sem corpo
+   * nenhum, mas com `Content-Type: application/json` no cabeçalho, dá
+   * 400 do próprio Fastify (`FST_ERR_CTP_EMPTY_JSON_BODY`) — a rota nunca
+   * chega a rodar. O cliente deste repositório escapa disso por cuidado
+   * em `pedir()`, que só manda o cabeçalho quando há corpo de verdade.
+   * Mas seis rotas daqui (poção, reviver, sair da conta, apagar
+   * personagem, comprar slot, retirar anúncio) não esperam corpo nenhum,
+   * e mandar `Content-Type: application/json` em toda chamada — inclusive
+   * as sem corpo — é o hábito mais comum que existe em cliente HTTP,
+   * `fetch` puro incluído se copiado de outra chamada por engano. Um
+   * consumidor futuro da API — outro cliente, um script, Postman — cai
+   * nisso na primeira tentativa, e caiu: foi assim que apareceu.
+   *
+   * Sobrescreve o parser padrão de JSON do Fastify para tratar corpo
+   * vazio como `{}` em vez de erro. Corpo malformado continua sendo erro.
+   */
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (_pedido, corpo: string, pronto) => {
+      if (corpo === "") {
+        pronto(null, {});
+        return;
+      }
+      try {
+        pronto(null, JSON.parse(corpo));
+      } catch (erro) {
+        pronto(erro as Error, undefined);
+      }
+    },
+  );
+
   /**
    * Carrega o personagem e aplica o que aconteceu enquanto ele esteve fora.
    *

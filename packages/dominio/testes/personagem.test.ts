@@ -17,7 +17,7 @@ import {
   subclassesDisponiveis,
   vidaMaximaDe,
 } from "../src/personagem.ts";
-import { OFFLINE_TETO_HORAS } from "../src/balanceamento.ts";
+import { OFFLINE_TETO_HORAS, SUCATA_INICIAL } from "../src/balanceamento.ts";
 import { nivelDaParede, xpParaNivel } from "../src/progressao.ts";
 
 const AGORA = 1_700_000_000_000;
@@ -44,7 +44,9 @@ describe("criação", () => {
     assert.equal(p.camada, 0);
     assert.equal(p.estado, "vivo");
     assert.equal(p.vida, vidaMaximaDe(p));
-    assert.equal(p.sucata, 0);
+    // Não zero: um presente de partida evita o arranque frio — ver
+    // `SUCATA_INICIAL` em balanceamento.ts, com a medição completa.
+    assert.equal(p.sucata, SUCATA_INICIAL);
     // Moeda premium NÃO fica aqui: é da conta, e sobrevive ao permadeath.
     assert.equal("premium" in p, false);
   });

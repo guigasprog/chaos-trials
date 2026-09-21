@@ -18,6 +18,7 @@ import {
   curaPorDescanso,
   ganharXp,
   type Personagem,
+  podeBeberPocao,
   precoDaPocao,
   recompensaDe,
   recuar,
@@ -244,6 +245,37 @@ describe("sempre existe caminho de volta", () => {
         `nível ${nivel}: a poção custa ${emVitorias.toFixed(1)} vitórias`,
       );
     }
+  });
+
+  it("o ARRANQUE FRIO: nascer, perder a primeira luta, e ainda pagar a poção", () => {
+    /*
+     * O caso que faltava, e que um playtest de ponta a ponta achou: toda
+     * medição acima parte de `heroiNoNivel`, que já carrega o presente de
+     * partida — mas nenhuma delas testava o momento exato em que ele
+     * existe PARA resolver: o personagem que acabou de nascer, perdeu a
+     * primeira luta (a pior sorte possível, cedo demais para ter
+     * aprendido a usar a habilidade de recarga), e precisa da poção para
+     * continuar.
+     *
+     * Sem `SUCATA_INICIAL`, esta é a luta perdida número um: sucata some
+     * a 0, e sem sucata a poção não sai. Simulado em
+     * `scripts/arranque-frio-golpe.ts` (removido depois de medir): sem
+     * presente de partida, 33,7% dos personagens travavam já nas
+     * primeiras 15 ações — o pior tipo de bug, porque acontece no
+     * PRIMEIRO minuto de jogo.
+     */
+    const recemNascido = criarPersonagem({
+      id: "p",
+      nome: "P",
+      classeRaiz: CLASSE,
+      agora: 0,
+    });
+    const perdeuAPrimeira = recuar(recemNascido);
+    assert.equal(
+      podeBeberPocao(perdeuAPrimeira),
+      null,
+      `sem sucata para a primeira poção: tem ${perdeuAPrimeira.sucata}, precisa de ${precoDaPocao(perdeuAPrimeira)}`,
+    );
   });
 });
 

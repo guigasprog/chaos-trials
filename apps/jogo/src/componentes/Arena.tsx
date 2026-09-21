@@ -33,7 +33,8 @@ function Desfecho({ duelo, aoFechar }: { duelo: Duelo; aoFechar: () => void }) {
         {duelo.venci ? "Você venceu o duelo." : "Você perdeu o duelo."}
       </p>
       <p className="text-[0.9rem] leading-relaxed text-tinta-fraca">
-        {duelo.rodadas} rodadas contra {duelo.defensor.nome}.{" "}
+        {duelo.rodadas} rodada{duelo.rodadas === 1 ? "" : "s"} contra{" "}
+        {duelo.defensor.nome}.{" "}
         {duelo.venci
           ? `+${n(duelo.premio)} de sucata.`
           : "Nada de sucata — e nada perdido além do cansaço."}
@@ -129,7 +130,7 @@ export function Arena({
           <p className="mt-1 text-[0.82rem] text-tinta-fraca">
             {total === 0
               ? "Nenhum duelo ainda."
-              : `${vitorias} vitórias, ${derrotas} derrotas · ${p.duelos.defesas} defesas bem-sucedidas`}
+              : `${vitorias} vitória${vitorias === 1 ? "" : "s"}, ${derrotas} derrota${derrotas === 1 ? "" : "s"} · ${p.duelos.defesas} defesa${p.duelos.defesas === 1 ? "" : "s"} bem-sucedida${p.duelos.defesas === 1 ? "" : "s"}`}
           </p>
         </div>
         <button type="button" onClick={aoFechar} className="botao">
