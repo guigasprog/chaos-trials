@@ -16,6 +16,7 @@ import {
   type Resultado,
   tokenGuardado,
 } from "@/lib/api";
+import { Arena } from "@/componentes/Arena";
 import { Arvore } from "@/componentes/Arvore";
 import { Combate } from "@/componentes/Combate";
 import { Criacao } from "@/componentes/Criacao";
@@ -49,7 +50,7 @@ export default function Jogo() {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   /** Qual painel está por cima da ficha. */
   const [painel, setPainel] = useState<
-    "ficha" | "arvore" | "itens" | "mercado"
+    "ficha" | "arvore" | "itens" | "mercado" | "arena"
   >("ficha");
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -217,6 +218,7 @@ export default function Jogo() {
         aoAbrirArvore={() => setPainel("arvore")}
         aoAbrirItens={() => setPainel("itens")}
         aoAbrirMercado={() => setPainel("mercado")}
+        aoAbrirArena={() => setPainel("arena")}
         aoTrocar={() => {
           esquecerId();
           setP(null);
@@ -242,6 +244,8 @@ export default function Jogo() {
             aoAtualizarConta={() => void recarregar()}
             aoFechar={() => setPainel("ficha")}
           />
+        ) : painel === "arena" ? (
+          <Arena p={p} aoAtualizar={setP} aoFechar={() => setPainel("ficha")} />
         ) : batalha && !resultado ? (
           <Combate
             batalha={batalha}

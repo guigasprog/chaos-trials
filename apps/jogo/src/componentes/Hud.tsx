@@ -26,6 +26,7 @@ export function Hud({
   aoAbrirArvore,
   aoAbrirItens,
   aoAbrirMercado,
+  aoAbrirArena,
   aoTrocar,
   travado,
 }: {
@@ -34,6 +35,7 @@ export function Hud({
   aoAbrirArvore: () => void;
   aoAbrirItens: () => void;
   aoAbrirMercado: () => void;
+  aoAbrirArena: () => void;
   aoTrocar: () => void;
   /** Em combate a árvore não abre: gastar ponto no meio da luta é trapaça. */
   travado: boolean;
@@ -123,6 +125,16 @@ export function Hud({
         title={travado ? "o mercado não abre no meio de uma luta" : "Mercado"}
       >
         Mercado
+      </button>
+
+      <button
+        type="button"
+        onClick={aoAbrirArena}
+        disabled={travado}
+        className="hud-arvore"
+        title={travado ? "a arena não abre no meio de uma luta" : "Arena"}
+      >
+        Arena
       </button>
     </header>
   );

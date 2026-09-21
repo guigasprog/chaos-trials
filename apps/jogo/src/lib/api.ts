@@ -81,6 +81,28 @@ export interface Anuncio {
   aoVendedor: number;
 }
 
+/** Um adversário na arena. Sem mochila nem sucata: não é da nossa conta. */
+export interface Alvo {
+  id: string;
+  nome: string;
+  nivel: number;
+  camada: number;
+  elo: number;
+  classe: { indice: number; nome: string; ramo: 1 | 2 | 3 | 4 | 5 };
+  vidaMaxima: number;
+  defesas: number;
+}
+
+export interface Duelo {
+  venci: boolean;
+  rodadas: number;
+  eventos: Evento[];
+  premio: number;
+  elo: { antes: number; depois: number };
+  defensor: Alvo;
+  personagem: Personagem | null;
+}
+
 export interface Personagem {
   id: string;
   nome: string;
@@ -95,6 +117,9 @@ export interface Personagem {
   sucata: number;
   mortes: number;
   parede: number;
+  /** Pontuação na arena, e o histórico de duelos dos dois lados. */
+  elo: number;
+  duelos: { vitorias: number; derrotas: number; defesas: number };
   podeRenascer: boolean;
   subclasses: { indice: number; nome: string }[];
   habilidades: { id: string; nome: string; descricao: string; recarga: number }[];
@@ -292,6 +317,18 @@ export const api = {
 
   reviver: (id: string) =>
     pedir<Personagem>(`/personagens/${id}/reviver`, { metodo: "POST" }),
+
+  arena: (personagem: string) =>
+    pedir<{
+      eu: { elo: number; nivel: number };
+      faixa: { minimo: number; maximo: number };
+      podeDesafiar: boolean;
+      impedimento: string | null;
+      alvos: Alvo[];
+    }>(`/arena?personagem=${encodeURIComponent(personagem)}`),
+
+  duelar: (alvo: string, personagem: string) =>
+    pedir<Duelo>(`/arena/${alvo}`, { metodo: "POST", corpo: { personagem } }),
 
   beberPocao: (id: string) =>
     pedir<Personagem & { curou: number; pagou: number }>(

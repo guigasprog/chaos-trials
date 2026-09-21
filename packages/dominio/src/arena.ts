@@ -65,8 +65,13 @@ export interface Duelo {
  * permite ao defensor ver o replay do que aconteceu com ele.
  *
  * Os dois entram com a VIDA CHEIA, e não com a vida corrente. O defensor
- * não está lá para se curar antes, e atacar quem acabou de sair de uma
- * luta difícil seria premiar cronometragem em vez de build.
+ * não está lá para beber poção antes, e atacar quem acabou de sair de
+ * uma luta difícil seria premiar cronometragem em vez de build — o
+ * jogador viraria um vigia esperando o outro ficar machucado.
+ *
+ * O desafiante paga o desgaste DEPOIS, sobre a vida que ele realmente
+ * tem (`vidaAposDuelo`). Entrar cheio e sair cansado é o custo; entrar
+ * ferido não deixa o duelo mais fácil para o outro lado.
  */
 export function duelar(
   desafiante: Personagem,
@@ -173,6 +178,35 @@ export function premioDaArena(nivel: number): number {
 }
 
 export function vidaAposDuelo(p: Personagem): number {
-  // Piso em 1: a arena cansa, mas não mata nem deixa impedido de jogar.
-  return Math.max(1, Math.round(vidaMaximaDe(p) * (1 - DESGASTE_DA_ARENA)));
+  /*
+   * MÍNIMO entre o que se tem e o teto de desgaste — nunca um valor
+   * fixo.
+   *
+   * Definir em 60% da máxima teria o mesmo defeito que `recuar` tinha:
+   * quem entrasse com 55% SAIRIA com 60%, e duelar viraria uma forma de
+   * se curar. O limiar de entrada é 50%, então a faixa de 50% a 60%
+   * seria exatamente a zona do abuso.
+   *
+   * Piso em 1: a arena cansa, mas não mata nem deixa impedido de jogar.
+   */
+  const teto = Math.round(vidaMaximaDe(p) * (1 - DESGASTE_DA_ARENA));
+  return Math.max(1, Math.min(p.vida, teto));
+}
+
+/**
+ * Se este personagem pode desafiar agora.
+ *
+ * O túmulo não duela, e quem está muito ferido também não: entrar na
+ * arena sem vida seria dar elo de graça ao defensor, e o jogador só
+ * descobriria depois de perder.
+ */
+export function podeDesafiar(
+  p: Personagem,
+  vidaMinima = 0.5,
+): string | null {
+  if (p.estado === "tumulo") return "quem está no túmulo não duela";
+  if (p.vida < vidaMaximaDe(p) * vidaMinima) {
+    return "ferido demais para entrar na arena";
+  }
+  return null;
 }

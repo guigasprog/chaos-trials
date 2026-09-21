@@ -6,7 +6,15 @@ import Fastify, {
 import cors from "@fastify/cors";
 import {
   adicionarPersonagem,
+  ajusteDeElo,
   ANUNCIOS_POR_CONTA,
+  duelar,
+  ESPERA_DO_MESMO_ALVO_MS,
+  faixaDeNivel,
+  podeDesafiar,
+  premioDaArena,
+  sementeDoDuelo,
+  vidaAposDuelo,
   type Anuncio,
   ARVORE,
   contaDaVenda,
@@ -169,6 +177,8 @@ function paraCliente(p: Personagem) {
     sucata: p.sucata,
     mortes: p.mortes,
     parede: Math.ceil(nivelDaParede(p.camada)),
+    elo: p.elo,
+    duelos: p.duelos,
     podeRenascer: prontoParaRenascer(p),
     subclasses: subclassesDisponiveis(p).map((i) => {
       const c = classePorIndice(i);
@@ -837,6 +847,157 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       return paraCliente(atualizado);
     });
   });
+
+  // ── Arena (PvP assíncrono) ─────────────────────────────────────────────
+
+  /**
+   * Quem dá para desafiar agora.
+   *
+   * Só personagens de OUTRAS contas, vivos e dentro da faixa de nível.
+   * Ordenados por proximidade de elo, porque dentro da faixa de nível é
+   * o elo que separa um duelo interessante de uma execução.
+   */
+  app.get("/arena", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const { personagem } = pedido.query as { personagem?: string };
+    if (!personagem) {
+      return resposta.status(400).send({ erro: "diga qual personagem" });
+    }
+
+    const carregado = await meuPersonagem(conta, personagem, resposta);
+    if (!carregado) return;
+    const eu = carregado.personagem;
+
+    const faixa = faixaDeNivel(eu.nivel);
+    const todos = await armazenamento.personagens.listar();
+    const alvos = todos
+      .map(normalizar)
+      .filter((p) => !conta.personagens.includes(p.id))
+      .filter((p) => p.estado === "vivo")
+      .filter((p) => p.nivel >= faixa.minimo && p.nivel <= faixa.maximo)
+      .sort((a, b) => Math.abs(a.elo - eu.elo) - Math.abs(b.elo - eu.elo))
+      .slice(0, 12)
+      .map(defensorParaCliente);
+
+    const impede = podeDesafiar(eu);
+    return {
+      eu: { elo: eu.elo, duelos: eu.duelos, nivel: eu.nivel },
+      faixa,
+      podeDesafiar: impede === null,
+      impedimento: impede,
+      esperaEntreDuelos: ESPERA_DO_MESMO_ALVO_MS,
+      alvos,
+    };
+  });
+
+  /**
+   * Duelar.
+   *
+   * O defensor NÃO perde nada material — nem sucata, nem item, nem vida,
+   * nem nível. Ele não estava lá e não escolheu lutar; ser atacado
+   * dormindo e acordar mais pobre é o tipo de coisa que faz alguém parar
+   * de jogar. O que muda para ele é o elo, que é reputação e não
+   * patrimônio.
+   */
+  app.post("/arena/:alvo", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const { alvo } = pedido.params as { alvo: string };
+    const corpo = pedido.body as { personagem?: string };
+    if (!corpo?.personagem) {
+      return resposta.status(400).send({ erro: "diga qual personagem desafia" });
+    }
+    if (conta.personagens.includes(alvo)) {
+      // Duelar contra si mesmo seria mover elo entre os próprios
+      // personagens — e o elo é soma zero justamente para isso não valer.
+      return resposta.status(400).send({ erro: "esse personagem é seu" });
+    }
+
+    return filas.executarEm(
+      [chaveDoPersonagem(corpo.personagem), chaveDoPersonagem(alvo)],
+      async () => {
+        const carregado = await meuPersonagem(conta, corpo.personagem!, resposta);
+        if (!carregado) return;
+        const eu = carregado.personagem;
+
+        const bruto = await armazenamento.personagens.buscar(alvo);
+        if (!bruto) return resposta.status(404).send({ erro: "alvo não encontrado" });
+        const defensor = normalizar(bruto);
+        if (defensor.estado === "tumulo") {
+          return resposta.status(409).send({ erro: "esse alvo está no túmulo" });
+        }
+
+        const impede = podeDesafiar(eu);
+        if (impede) return resposta.status(409).send({ erro: impede });
+
+        const faixa = faixaDeNivel(eu.nivel);
+        if (defensor.nivel < faixa.minimo || defensor.nivel > faixa.maximo) {
+          return resposta.status(409).send({
+            erro: `fora da faixa: seu nível abre de ${faixa.minimo} a ${faixa.maximo}`,
+          });
+        }
+
+        const duelo = duelar(
+          eu,
+          defensor,
+          sementeDoDuelo(eu.id, defensor.id, agora()),
+        );
+        const venci = duelo.vencedor === "desafiante";
+        const elos = ajusteDeElo(eu.elo, defensor.elo, venci);
+        const premio = venci ? premioDaArena(eu.nivel) : 0;
+
+        await armazenamento.personagens.salvar({
+          ...eu,
+          elo: elos.desafiante,
+          // Duelar cansa: é o custo, e é em tempo, não em patrimônio.
+          vida: vidaAposDuelo(eu),
+          sucata: eu.sucata + premio,
+          duelos: {
+            ...eu.duelos,
+            vitorias: eu.duelos.vitorias + (venci ? 1 : 0),
+            derrotas: eu.duelos.derrotas + (venci ? 0 : 1),
+          },
+        });
+
+        // Do defensor muda SÓ o elo e a contagem de defesas.
+        await armazenamento.personagens.salvar({
+          ...defensor,
+          elo: elos.defensor,
+          duelos: {
+            ...defensor.duelos,
+            defesas: defensor.duelos.defesas + (venci ? 0 : 1),
+          },
+        });
+
+        const atualizado = await carregar(eu.id);
+        return {
+          venci,
+          rodadas: duelo.rodadas,
+          eventos: duelo.eventos,
+          premio,
+          elo: { antes: eu.elo, depois: elos.desafiante },
+          defensor: defensorParaCliente(defensor),
+          personagem: atualizado ? paraCliente(atualizado.personagem) : null,
+        };
+      },
+    );
+  });
+
+  /** O defensor como a tela o vê. Nada de mochila nem de sucata dele. */
+  function defensorParaCliente(p: Personagem) {
+    const classe = classePorIndice(p.classe);
+    return {
+      id: p.id,
+      nome: p.nome,
+      nivel: p.nivel,
+      camada: p.camada,
+      elo: p.elo,
+      classe: { indice: classe.indice, nome: classe.nome, ramo: ramoDe(p.classe) },
+      vidaMaxima: vidaMaximaDe(p),
+      defesas: p.duelos.defesas,
+    };
+  }
 
   // ── Mercado ────────────────────────────────────────────────────────────
 
