@@ -24,12 +24,14 @@ export function Hud({
   p,
   conta,
   aoAbrirArvore,
+  aoAbrirItens,
   aoTrocar,
   travado,
 }: {
   p: Personagem;
   conta: Conta;
   aoAbrirArvore: () => void;
+  aoAbrirItens: () => void;
   aoTrocar: () => void;
   /** Em combate a árvore não abre: gastar ponto no meio da luta é trapaça. */
   travado: boolean;
@@ -91,6 +93,23 @@ export function Hud({
         Árvore
         {p.arvore.pontos > 0 && (
           <span className="hud-pontos">{p.arvore.pontos}</span>
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={aoAbrirItens}
+        disabled={travado}
+        className="hud-arvore"
+        title={
+          travado ? "a mochila não abre no meio de uma luta" : "Equipamento"
+        }
+      >
+        Mochila
+        {/* O número só aparece quando a mochila está cheia: aí ele é um
+            aviso, e não decoração — o que cair vira sucata sozinho. */}
+        {p.mochila.length >= p.mochilaMaxima && (
+          <span className="hud-pontos hud-pontos-cheio">cheia</span>
         )}
       </button>
     </header>

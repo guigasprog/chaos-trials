@@ -22,6 +22,7 @@ import { Criacao } from "@/componentes/Criacao";
 import { Entrada } from "@/componentes/Entrada";
 import { Ficha } from "@/componentes/Ficha";
 import { Hud } from "@/componentes/Hud";
+import { Itens } from "@/componentes/Itens";
 import { Slots } from "@/componentes/Slots";
 
 /**
@@ -45,7 +46,8 @@ export default function Jogo() {
   const [p, setP] = useState<Personagem | null>(null);
   const [batalha, setBatalha] = useState<Batalha | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
-  const [naArvore, setNaArvore] = useState(false);
+  /** Qual painel está por cima da ficha. */
+  const [painel, setPainel] = useState<"ficha" | "arvore" | "itens">("ficha");
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -123,7 +125,7 @@ export default function Jogo() {
     setP(escolhido);
     setBatalha(null);
     setResultado(null);
-    setNaArvore(false);
+    setPainel("ficha");
     setLugar("jogando");
   }, []);
 
@@ -209,13 +211,14 @@ export default function Jogo() {
       <Hud
         p={p}
         conta={conta}
-        aoAbrirArvore={() => setNaArvore(true)}
+        aoAbrirArvore={() => setPainel("arvore")}
+        aoAbrirItens={() => setPainel("itens")}
         aoTrocar={() => {
           esquecerId();
           setP(null);
           setLugar("slots");
         }}
-        travado={emCombate || naArvore}
+        travado={emCombate || painel !== "ficha"}
       />
 
       <div className="pt-10">
@@ -223,8 +226,10 @@ export default function Jogo() {
           <p className="painel mb-8 p-4 text-[0.88rem] text-sangue">{erro}</p>
         )}
 
-        {naArvore ? (
-          <Arvore p={p} aoAtualizar={setP} aoFechar={() => setNaArvore(false)} />
+        {painel === "arvore" ? (
+          <Arvore p={p} aoAtualizar={setP} aoFechar={() => setPainel("ficha")} />
+        ) : painel === "itens" ? (
+          <Itens p={p} aoAtualizar={setP} aoFechar={() => setPainel("ficha")} />
         ) : batalha && !resultado ? (
           <Combate
             batalha={batalha}
@@ -253,16 +258,64 @@ export default function Jogo() {
                       ? "O julgamento cobrou o que prometeu. Seu personagem está no túmulo."
                       : "Ferido, mas vivo. Batalha comum não mata — só julgamento."}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResultado(null);
-                    setBatalha(null);
-                  }}
-                  className="botao self-start"
-                >
-                  Seguir
-                </button>
+
+                {/* A queda tem cartão próprio: um achado no meio de uma
+                    frase de recompensa passa despercebido, e o achado é o
+                    motivo de lutar de novo. */}
+                {resultado.queda && (
+                  <div
+                    className="queda"
+                    style={
+                      { "--raro": resultado.queda.cor } as React.CSSProperties
+                    }
+                  >
+                    <p className="rotulo">
+                      {resultado.queda.viroSucata
+                        ? "caiu, mas a mochila estava cheia"
+                        : "caiu no chão"}
+                    </p>
+                    <p
+                      className="titulo text-2xl"
+                      style={{ color: resultado.queda.cor }}
+                    >
+                      {resultado.queda.nome}
+                    </p>
+                    <p className="text-[0.82rem] text-tinta-fraca">
+                      {resultado.queda.raridadeNome} ·{" "}
+                      {resultado.queda.encaixeNome} · {resultado.queda.poder} de
+                      poder
+                      {resultado.queda.viroSucata
+                        ? ` — virou ${resultado.queda.viroSucata} de sucata`
+                        : ""}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResultado(null);
+                      setBatalha(null);
+                    }}
+                    className="botao"
+                  >
+                    Seguir
+                  </button>
+                  {resultado.queda && !resultado.queda.viroSucata && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResultado(null);
+                        setBatalha(null);
+                        setPainel("itens");
+                      }}
+                      className="botao"
+                    >
+                      Ver na mochila
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

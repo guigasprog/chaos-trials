@@ -179,6 +179,36 @@ export const VIDA_APOS_RECUAR = 0.7;
  *  preservado indefinidamente. */
 export const PRECO_REVIVE = 250;
 
+// ── Queda de item ────────────────────────────────────────────────────────
+
+/**
+ * Chance de a batalha comum largar uma peça.
+ *
+ * Um terço, e não toda vitória: com queda garantida a mochila enche em
+ * cinco lutas e a peça deixa de ser notícia. Com um terço, o achado
+ * continua sendo um momento, e ainda cai rápido o bastante para a decisão
+ * de equipar aparecer na primeira sessão.
+ */
+export const CHANCE_DE_QUEDA_COMUM = 0.34;
+
+/**
+ * O julgamento SEMPRE larga.
+ *
+ * É a luta em que se morre de verdade; sair dela de mãos vazias
+ * transformaria o risco em aposta ruim. A garantia é metade do prêmio — a
+ * outra é o sorteio dobrado logo abaixo.
+ */
+export const CHANCE_DE_QUEDA_JULGAMENTO = 1;
+
+/**
+ * Quantos sorteios de raridade o julgamento faz, ficando com o melhor.
+ *
+ * Dobrar o sorteio é mais forte do que parece na cauda: a chance de peça
+ * sagrada quase dobra, e é justamente a cauda que faz alguém aceitar
+ * arriscar o personagem.
+ */
+export const SORTEIOS_DO_JULGAMENTO = 2;
+
 // ── Conta e slots ────────────────────────────────────────────────────────
 
 /**

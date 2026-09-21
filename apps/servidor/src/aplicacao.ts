@@ -16,7 +16,23 @@ import {
   criarPersonagem,
   custoDoRevive,
   debitarPremium,
+  desequipar,
+  desmanchar,
+  type Encaixe,
+  ENCAIXES,
+  equipar,
+  guardarItem,
+  type Item,
+  itemNaMochila,
+  MOCHILA_MAXIMA,
+  NOME_DO_ENCAIXE,
   normalizarConta,
+  PERFIL,
+  poderDoItem,
+  precoDeDesmanche,
+  propriedadesDe,
+  sementeDe,
+  sortearQueda,
   normalizarEmail,
   podeComprarSlot,
   precoDoProximoSlot,
@@ -143,6 +159,41 @@ function paraCliente(p: Personagem) {
     }),
     custoDoRevive: custoDoRevive(),
     arvore: arvoreParaCliente(p),
+    equipado: Object.fromEntries(
+      ENCAIXES.flatMap((e) => {
+        const item = (p.equipado ?? {})[e];
+        return item ? [[e, itemParaCliente(item)]] : [];
+      }),
+    ),
+    // Ordenada por poder: a mochila só é legível de relance se a peça que
+    // vale mais estiver por cima. Ordenar na tela duplicaria a regra.
+    mochila: [...(p.mochila ?? [])]
+      .sort((a, b) => poderDoItem(b) - poderDoItem(a))
+      .map(itemParaCliente),
+    mochilaMaxima: MOCHILA_MAXIMA,
+  };
+}
+
+/**
+ * O item como a tela precisa dele.
+ *
+ * As propriedades vêm já formatadas e a cor da raridade vem junto: são
+ * regra de domínio, e recalculá-las no cliente é a mesma duplicação que o
+ * impedimento da árvore evita.
+ */
+function itemParaCliente(item: Item) {
+  return {
+    id: item.id,
+    nome: item.nome,
+    encaixe: item.encaixe,
+    encaixeNome: NOME_DO_ENCAIXE[item.encaixe],
+    raridade: item.raridade,
+    raridadeNome: PERFIL[item.raridade].nome,
+    cor: PERFIL[item.raridade].cor,
+    nivel: item.nivel,
+    poder: poderDoItem(item),
+    desmanchePor: precoDeDesmanche(item),
+    propriedades: propriedadesDe(item),
   };
 }
 
@@ -590,7 +641,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
 
     const premio = premioDe(sessao.nivelInicial, sessao.tipo);
     const ganho = ganharXp(guardado, premio.xp);
-    const atualizado: Personagem = {
+    let atualizado: Personagem = {
       ...ganho.personagem,
       sucata: ganho.personagem.sucata + premio.sucata,
       // A mesma recuperação que o offline aplica. Sem ela, uma vitória
@@ -598,15 +649,47 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       // seria cobrar por uma dificuldade que o desenho criou.
       vida: vidaAposVitoria(ganho.personagem),
     };
+
+    /*
+     * A queda.
+     *
+     * A semente sai do id da batalha e do personagem, e não do relógio:
+     * o servidor precisa poder recalcular a mesma batalha e chegar na
+     * mesma peça para auditar uma reclamação sem acreditar em ninguém.
+     */
+    const caiu = sortearQueda({
+      nivel: sessao.nivelInicial,
+      ramo: ramoDe(atualizado.classe),
+      semente: sementeDe(`${sessao.personagemId}:${sessao.id}:queda`),
+      id: `it${novoSufixo()}`,
+      mortal: sessao.tipo === "julgamento",
+    });
+
+    let queda = null;
+    let sucataDaQueda = 0;
+    if (caiu) {
+      if ((atualizado.mochila ?? []).length < MOCHILA_MAXIMA) {
+        atualizado = guardarItem(atualizado, caiu);
+        queda = itemParaCliente(caiu);
+      } else {
+        // Mochila cheia vira sucata em vez de recusar a peça: recusar
+        // pararia o laço de jogo para mandar arrumar gaveta.
+        sucataDaQueda = precoDeDesmanche(caiu);
+        atualizado = { ...atualizado, sucata: atualizado.sucata + sucataDaQueda };
+        queda = { ...itemParaCliente(caiu), viroSucata: sucataDaQueda };
+      }
+    }
+
     await armazenamento.personagens.salvar(atualizado);
 
     return {
       venceu: true,
       xp: premio.xp,
-      sucata: premio.sucata,
+      sucata: premio.sucata + sucataDaQueda,
       niveisSubidos: ganho.niveisSubidos,
       morreu: false,
       recuou: false,
+      queda,
       personagem: paraCliente(atualizado),
     };
   }
@@ -655,6 +738,56 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     const atualizado = renascer(carregado.personagem, corpo.classe);
     await armazenamento.personagens.salvar(atualizado);
     return paraCliente(atualizado);
+  });
+
+  // ── Itens ──────────────────────────────────────────────────────────────
+
+  app.post("/personagens/:id/equipar", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const { id } = pedido.params as { id: string };
+    const corpo = pedido.body as { item?: string };
+    const carregado = await meuPersonagem(conta, id, resposta);
+    if (!carregado) return;
+    if (!corpo?.item) return resposta.status(400).send({ erro: "diga qual peça" });
+
+    const atualizado = equipar(carregado.personagem, corpo.item);
+    await armazenamento.personagens.salvar(atualizado);
+    return paraCliente(atualizado);
+  });
+
+  app.post("/personagens/:id/desequipar", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const { id } = pedido.params as { id: string };
+    const corpo = pedido.body as { encaixe?: Encaixe };
+    const carregado = await meuPersonagem(conta, id, resposta);
+    if (!carregado) return;
+    if (!corpo?.encaixe || !ENCAIXES.includes(corpo.encaixe)) {
+      return resposta.status(400).send({ erro: "diga qual encaixe" });
+    }
+
+    const atualizado = desequipar(carregado.personagem, corpo.encaixe);
+    await armazenamento.personagens.salvar(atualizado);
+    return paraCliente(atualizado);
+  });
+
+  /** Desmancha em sucata. Só o que está na mochila: o vestido sai primeiro. */
+  app.post("/personagens/:id/desmanchar", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const { id } = pedido.params as { id: string };
+    const corpo = pedido.body as { item?: string };
+    const carregado = await meuPersonagem(conta, id, resposta);
+    if (!carregado) return;
+    if (!corpo?.item) return resposta.status(400).send({ erro: "diga qual peça" });
+    if (!itemNaMochila(carregado.personagem, corpo.item)) {
+      return resposta.status(404).send({ erro: "essa peça não está na mochila" });
+    }
+
+    const { personagem, sucata } = desmanchar(carregado.personagem, corpo.item);
+    await armazenamento.personagens.salvar(personagem);
+    return { ...paraCliente(personagem), rendeu: sucata };
   });
 
   /**

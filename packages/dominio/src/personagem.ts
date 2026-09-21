@@ -1,5 +1,6 @@
 import { atributosDe, somar, vidaMaxima } from "./atributos.ts";
 import {
+  type Bonus,
   bonusDe,
   comprar,
   type Gastos,
@@ -7,6 +8,14 @@ import {
   pontosLivres,
   zerar,
 } from "./arvore.ts";
+import {
+  bonusDoEquipamento,
+  type Encaixe,
+  type Item,
+  NOME_DO_ENCAIXE,
+  precoDeDesmanche,
+  somarBonus,
+} from "./item.ts";
 import { sementeDe } from "./aleatorio.ts";
 import {
   criarCombatente,
@@ -71,6 +80,10 @@ export interface Personagem {
   readonly mortes: number;
   /** Graus comprados na árvore de habilidade, por id de nó. */
   readonly gastos: Gastos;
+  /** O que está vestido, por encaixe. */
+  readonly equipado: Partial<Record<Encaixe, Item>>;
+  /** O que está guardado. Tem teto: ver `MOCHILA_MAXIMA`. */
+  readonly mochila: readonly Item[];
 }
 
 export function criarPersonagem(dados: {
@@ -98,6 +111,8 @@ export function criarPersonagem(dados: {
     sucata: 0,
     mortes: 0,
     gastos: zerar(),
+    equipado: {},
+    mochila: [],
   };
 }
 
@@ -114,13 +129,105 @@ export function criarPersonagem(dados: {
  */
 export function normalizar(p: Personagem): Personagem {
   const inteiro = Math.round(p.xp);
-  if (p.gastos && p.xp === inteiro) return p;
-  return { ...p, gastos: p.gastos ?? zerar(), xp: inteiro };
+  if (p.gastos && p.mochila && p.equipado && p.xp === inteiro) return p;
+  return {
+    ...p,
+    gastos: p.gastos ?? zerar(),
+    equipado: p.equipado ?? {},
+    mochila: p.mochila ?? [],
+    xp: inteiro,
+  };
 }
 
-/** O que a árvore rende para este personagem, já com o ramo certo. */
-export function bonusDoPersonagem(p: Personagem) {
-  return bonusDe(p.gastos ?? {}, ramoDe(p.classe));
+/**
+ * Tudo que soma neste personagem: a árvore MAIS o equipamento.
+ *
+ * Um `Bonus` só, e não dois caminhos paralelos. "Mais 8% de dano" tem de
+ * significar exatamente a mesma coisa vindo da árvore e vindo de uma
+ * lâmina — dois caminhos para o mesmo efeito é onde a regra diverge sem
+ * ninguém notar.
+ */
+export function bonusDoPersonagem(p: Personagem): Bonus {
+  return somarBonus(
+    bonusDe(p.gastos ?? {}, ramoDe(p.classe)),
+    bonusDoEquipamento(p.equipado ?? {}),
+  );
+}
+
+// ── Equipamento ──────────────────────────────────────────────────────────
+
+/**
+ * Teto da mochila.
+ *
+ * Existe porque sem ele a mochila vira um depósito infinito que ninguém
+ * olha, e a decisão "isto vale um espaço?" — que é a decisão do sistema de
+ * itens — nunca acontece. Quando está cheia, a queda vira sucata em vez de
+ * ser recusada: recusar pararia o laço de jogo para mandar arrumar gaveta.
+ */
+export const MOCHILA_MAXIMA = 24;
+
+export function guardarItem(p: Personagem, item: Item): Personagem {
+  const mochila = p.mochila ?? [];
+  if (mochila.length >= MOCHILA_MAXIMA) {
+    throw new Error(`a mochila está cheia (${MOCHILA_MAXIMA} peças)`);
+  }
+  return { ...p, mochila: [...mochila, item] };
+}
+
+export function itemNaMochila(p: Personagem, id: string): Item | null {
+  return (p.mochila ?? []).find((i) => i.id === id) ?? null;
+}
+
+/**
+ * Veste uma peça da mochila. O que estava no encaixe volta para a mochila.
+ *
+ * A troca é atômica de propósito: tirar e pôr em dois passos deixaria um
+ * instante com a mochila cheia e a peça antiga sem lugar.
+ */
+export function equipar(p: Personagem, id: string): Personagem {
+  const item = itemNaMochila(p, id);
+  if (!item) throw new Error("essa peça não está na mochila");
+
+  const anterior = (p.equipado ?? {})[item.encaixe];
+  const mochila = (p.mochila ?? []).filter((i) => i.id !== id);
+  return {
+    ...p,
+    equipado: { ...(p.equipado ?? {}), [item.encaixe]: item },
+    mochila: anterior ? [...mochila, anterior] : mochila,
+  };
+}
+
+export function desequipar(p: Personagem, encaixe: Encaixe): Personagem {
+  const item = (p.equipado ?? {})[encaixe];
+  if (!item) throw new Error(`não há nada em ${NOME_DO_ENCAIXE[encaixe]}`);
+  if ((p.mochila ?? []).length >= MOCHILA_MAXIMA) {
+    throw new Error("a mochila está cheia — desmanche alguma coisa antes");
+  }
+  const equipado = { ...(p.equipado ?? {}) };
+  delete equipado[encaixe];
+  return { ...p, equipado, mochila: [...(p.mochila ?? []), item] };
+}
+
+export interface Desmanche {
+  readonly personagem: Personagem;
+  readonly sucata: number;
+}
+
+/** Desmancha uma peça da mochila em sucata. Só da mochila: o que está
+ *  vestido tem de sair do corpo primeiro, e isso é um gesto a mais de
+ *  propósito — desmanchar a arma equipada por engano é caro. */
+export function desmanchar(p: Personagem, id: string): Desmanche {
+  const item = itemNaMochila(p, id);
+  if (!item) throw new Error("essa peça não está na mochila");
+  const sucata = precoDeDesmanche(item);
+  return {
+    personagem: {
+      ...p,
+      mochila: (p.mochila ?? []).filter((i) => i.id !== id),
+      sucata: p.sucata + sucata,
+    },
+    sucata,
+  };
 }
 
 export function pontosDisponiveis(p: Personagem): number {

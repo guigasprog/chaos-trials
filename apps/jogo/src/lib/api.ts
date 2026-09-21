@@ -40,6 +40,31 @@ export interface Conta {
   };
 }
 
+export type Encaixe = "arma" | "elmo" | "peito" | "talisma";
+
+/**
+ * A peça, já pronta para a tela.
+ *
+ * Cor, nome da raridade e propriedades em texto vêm do servidor: são regra
+ * de domínio, e recalculá-las aqui seria a mesma duplicação que o
+ * impedimento da árvore evita.
+ */
+export interface Item {
+  id: string;
+  nome: string;
+  encaixe: Encaixe;
+  encaixeNome: string;
+  raridade: string;
+  raridadeNome: string;
+  cor: string;
+  nivel: number;
+  poder: number;
+  desmanchePor: number;
+  propriedades: { nome: string; valor: string }[];
+  /** Presente só na queda que não coube na mochila. */
+  viroSucata?: number;
+}
+
 export interface Personagem {
   id: string;
   nome: string;
@@ -59,6 +84,10 @@ export interface Personagem {
   habilidades: { id: string; nome: string; descricao: string; recarga: number }[];
   custoDoRevive: number;
   arvore: Arvore;
+  equipado: Partial<Record<Encaixe, Item>>;
+  /** Já ordenada por poder pelo servidor. */
+  mochila: Item[];
+  mochilaMaxima: number;
   ausencia?: {
     horas: number;
     batalhas: number;
@@ -119,6 +148,8 @@ export interface Resultado {
   niveisSubidos: number;
   morreu: boolean;
   recuou?: boolean;
+  /** O que a vitória largou, se largou. */
+  queda?: Item | null;
   personagem?: Personagem;
 }
 
@@ -235,6 +266,24 @@ export const api = {
 
   reviver: (id: string) =>
     pedir<Personagem>(`/personagens/${id}/reviver`, { metodo: "POST" }),
+
+  equipar: (id: string, item: string) =>
+    pedir<Personagem>(`/personagens/${id}/equipar`, {
+      metodo: "POST",
+      corpo: { item },
+    }),
+
+  desequipar: (id: string, encaixe: Encaixe) =>
+    pedir<Personagem>(`/personagens/${id}/desequipar`, {
+      metodo: "POST",
+      corpo: { encaixe },
+    }),
+
+  desmanchar: (id: string, item: string) =>
+    pedir<Personagem & { rendeu: number }>(`/personagens/${id}/desmanchar`, {
+      metodo: "POST",
+      corpo: { item },
+    }),
 
   evoluirArvore: (id: string, no: string) =>
     pedir<Personagem>(`/personagens/${id}/arvore`, {

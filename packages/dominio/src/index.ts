@@ -14,4 +14,5 @@ export {
   SLOTS_MAXIMO,
 } from "./balanceamento.ts";
 export * from "./arvore.ts";
+export * from "./item.ts";
 export * from "./conta.ts";
