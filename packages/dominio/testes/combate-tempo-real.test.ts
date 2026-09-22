@@ -137,6 +137,9 @@ describe("iniciarEsquiva", () => {
 
 function salaComInimigoNaMesmaPosicao(): ReturnType<typeof novaSala> {
   const sala = novaSala();
+  // Nota: repositiona o jogador (não só o inimigo) porque atacar exige
+  // jogador.distancia === "perto" — sem isto, o miss seria garantido pela
+  // distância, não testando a condição de raia isoladamente.
   return {
     ...sala,
     jogador: { ...sala.jogador, raia: "centro", distancia: "perto" },
@@ -151,14 +154,17 @@ describe("atacar", () => {
     assert.ok(depois.inimigo.vida < sala.inimigo.vida, "o inimigo devia ter tomado dano");
   });
 
-  it("erra se as raias são diferentes", () => {
-    const sala = novaSala(); // jogador centro, inimigo centro por padrão — força diferença
-    const comDiferenca = {
+  it("erra se as raias são diferentes — isolação: distância perto, inimigo não esquivando", () => {
+    // Isola a condição de raia: jogador e inimigo têm distância perto e
+    // inimigo não esquiva, mas estão em raias diferentes. O miss deve ser
+    // pelo raia check, não pelo distance check.
+    const sala = salaComInimigoNaMesmaPosicao();
+    const raiasDiferentes = {
       ...sala,
-      inimigo: { ...sala.inimigo, raia: "direita" as const, distancia: "perto" as const },
+      inimigo: { ...sala.inimigo, raia: "direita" as const },
     };
-    const depois = atacar(comDiferenca);
-    assert.equal(depois.inimigo.vida, comDiferenca.inimigo.vida);
+    const depois = atacar(raiasDiferentes);
+    assert.equal(depois.inimigo.vida, raiasDiferentes.inimigo.vida);
   });
 
   it("erra se a distância não é perto", () => {
@@ -168,13 +174,18 @@ describe("atacar", () => {
     assert.equal(depois.inimigo.vida, longe.inimigo.vida);
   });
 
-  it("erra se o inimigo está numa janela de invencibilidade (não é o caso aqui, mas o jogo tem o espelho — ver Task 4)", () => {
-    // Este caso específico (inimigo esquivando) não existe nesta fase —
-    // só o JOGADOR esquiva. O teste documenta a assimetria: `atacar` não
-    // checa `sala.inimigo.esquivandoPor` porque esse campo nunca é
-    // setado por nenhuma função desta fase. Ver Task 4.
+  it("erra se o inimigo está esquivando — isolação: mesma raia, distância perto, mas esquiva ativa", () => {
+    // Isola a condição de esquiva: jogador e inimigo na mesma raia e
+    // distância perto, mas inimigo.esquivandoPor > 0. O miss deve ser
+    // pelo check de esquiva. (O campo nunca é setado por nenhuma função
+    // desta fase — Task 4 adicionará os golpes do inimigo.)
     const sala = salaComInimigoNaMesmaPosicao();
-    assert.equal(sala.inimigo.esquivandoPor, 0);
+    const inemigoEsquivando = {
+      ...sala,
+      inimigo: { ...sala.inimigo, esquivandoPor: 1 },
+    };
+    const depois = atacar(inemigoEsquivando);
+    assert.equal(depois.inimigo.vida, inemigoEsquivando.inimigo.vida);
   });
 
   it("não acerta se o JOGADOR está numa janela de esquiva — o golpe é dele, mas o teste documenta que atacar não depende disso", () => {
