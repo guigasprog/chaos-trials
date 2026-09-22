@@ -150,6 +150,20 @@ export function registrarRotasDeTempoReal(
     });
 
     socket.on("close", () => {
+      /*
+       * Desconectar com a sala ainda em andamento conta como derrota, na
+       * hora — e não só depois de `TIMEOUT_DE_DESCONEXAO_MS`.
+       *
+       * O `close` já para o tick (via `concluir` → `clearInterval`), então
+       * o timeout do intervalo nunca chegaria a rodar para pegar este caso.
+       * Sem isto, fechar a aba no meio de uma luta perdida seria um jeito
+       * de nunca pagar o risco — exatamente o que o timeout existe para
+       * evitar, e ele não evita se o socket já fechou antes de o intervalo
+       * rodar de novo.
+       */
+      if (!encerrada && sala.fase === "em-andamento") {
+        sala = { ...sala, fase: "derrota" };
+      }
       void concluir();
     });
   });
