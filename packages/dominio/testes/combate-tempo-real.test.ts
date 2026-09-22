@@ -6,6 +6,8 @@ import {
   moverDistancia,
   iniciarEsquiva,
   atacar,
+  decidirAcaoDoInimigo,
+  resolverAtaqueDoInimigo,
   RAIAS,
   DISTANCIAS,
 } from "../src/combate-tempo-real.ts";
@@ -204,5 +206,81 @@ describe("atacar", () => {
     assert.ok(depois.inimigo.vida <= 0);
     assert.equal(depois.onda, comInimigoFraco.onda, "atacar não avança onda — isso é avancarTick");
     assert.equal(depois.fase, "em-andamento", "atacar não decide vitória — isso é avancarTick");
+  });
+});
+
+describe("decidirAcaoDoInimigo", () => {
+  it("fora de alcance, persegue: se anda em raia, aproxima uma posição por vez", () => {
+    const sala = { ...novaSala(), inimigo: { ...novaSala().inimigo, raia: "direita" as const, distancia: "longe" as const } };
+    // jogador está em "centro" — inimigo em "direita" deve andar pra "centro"
+    const depois = decidirAcaoDoInimigo(sala);
+    assert.equal(depois.inimigo.raia, "centro");
+  });
+
+  it("já na mesma raia e mesma distância, não se move — decide telegrafar ou esperar", () => {
+    const sala = salaComInimigoNaMesmaPosicao();
+    // Sementes diferentes decidem diferente; roda várias vezes e confirma
+    // que a raia/distância nunca mudam quando já em alcance.
+    for (let s = 0; s < 20; s++) {
+      const comSemente = { ...sala, semente: s };
+      const depois = decidirAcaoDoInimigo(comSemente);
+      assert.equal(depois.inimigo.raia, sala.inimigo.raia);
+      assert.equal(depois.inimigo.distancia, sala.inimigo.distancia);
+    }
+  });
+
+  it("eventualmente telegrafa, dado sementes suficientes", () => {
+    const sala = salaComInimigoNaMesmaPosicao();
+    const telegrafou = Array.from({ length: 50 }, (_, s) =>
+      decidirAcaoDoInimigo({ ...sala, semente: s }),
+    ).some((depois) => depois.inimigo.telegrafandoPor !== null);
+    assert.ok(telegrafou, "em 50 sementes, nenhuma decidiu telegrafar");
+  });
+
+  it("já telegrafando, não decide nada novo — espera resolver", () => {
+    const sala = {
+      ...salaComInimigoNaMesmaPosicao(),
+      inimigo: { ...salaComInimigoNaMesmaPosicao().inimigo, telegrafandoPor: 3 },
+    };
+    const depois = decidirAcaoDoInimigo(sala);
+    assert.deepEqual(depois, sala);
+  });
+});
+
+describe("resolverAtaqueDoInimigo", () => {
+  it("acerta o jogador se ele não está esquivando", () => {
+    const sala = salaComInimigoNaMesmaPosicao();
+    const jogadorNaMesmaPosicao = {
+      ...sala,
+      jogador: { ...sala.jogador, raia: sala.inimigo.raia, distancia: sala.inimigo.distancia },
+    };
+    const depois = resolverAtaqueDoInimigo(jogadorNaMesmaPosicao);
+    assert.ok(depois.jogador.vida < jogadorNaMesmaPosicao.jogador.vida);
+  });
+
+  it("não acerta se o jogador está esquivando", () => {
+    const sala = salaComInimigoNaMesmaPosicao();
+    const esquivando = {
+      ...sala,
+      jogador: {
+        ...sala.jogador,
+        raia: sala.inimigo.raia,
+        distancia: sala.inimigo.distancia,
+        esquivandoPor: 2,
+      },
+    };
+    const depois = resolverAtaqueDoInimigo(esquivando);
+    assert.equal(depois.jogador.vida, esquivando.jogador.vida);
+  });
+
+  it("não acerta se raia ou distância diferem", () => {
+    const sala = novaSala(); // inimigo em "centro"/"longe" por padrão, jogador igual — força diferença
+    const separados = {
+      ...sala,
+      jogador: { ...sala.jogador, distancia: "perto" as const },
+      inimigo: { ...sala.inimigo, distancia: "longe" as const },
+    };
+    const depois = resolverAtaqueDoInimigo(separados);
+    assert.equal(depois.jogador.vida, separados.jogador.vida);
   });
 });

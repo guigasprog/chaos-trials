@@ -8,7 +8,9 @@ import {
   DUREZA_DO_CHEFE_NA_SALA,
   VIDA_DO_INIMIGO_COMUM_NA_SALA,
   VIDA_DO_CHEFE_NA_SALA,
+  TELEGRAFO_DO_INIMIGO_EM_TICKS,
 } from "./balanceamento.ts";
+import { chance } from "./aleatorio.ts";
 
 /**
  * O combate em tempo real — Fase 1: sala PvE contra um chefe.
@@ -176,5 +178,68 @@ export function atacar(sala: Sala): Sala {
       ...sala.inimigo,
       vida: Math.max(0, sala.inimigo.vida - sala.danoDoJogador),
     },
+  };
+}
+
+/** Chance por tick de iniciar o telégrafo, quando já em alcance. Não é
+    constante de balanceamento formal porque é puramente de ritmo de IA,
+    não de dificuldade — ajustar aqui não muda quem vence, só o quão
+    "nervoso" o inimigo parece. */
+const CHANCE_DE_TELEGRAFAR_POR_TICK = 0.15;
+
+/**
+ * Persegue se fora de alcance; senão, considera iniciar o telégrafo.
+ * Nunca decide as duas coisas no mesmo tick — perseguir e atacar juntos
+ * tornaria esquivar sem sentido, porque o inimigo já estaria em cima.
+ */
+export function decidirAcaoDoInimigo(sala: Sala): Sala {
+  if (sala.inimigo.telegrafandoPor !== null) return sala;
+
+  const mesmaRaia = sala.inimigo.raia === sala.jogador.raia;
+  const mesmaDistancia = sala.inimigo.distancia === sala.jogador.distancia;
+
+  if (!mesmaRaia || !mesmaDistancia) {
+    const raiaAtual = RAIAS.indexOf(sala.inimigo.raia);
+    const raiaAlvo = RAIAS.indexOf(sala.jogador.raia);
+    const distanciaAtual = DISTANCIAS.indexOf(sala.inimigo.distancia);
+    const distanciaAlvo = DISTANCIAS.indexOf(sala.jogador.distancia);
+
+    const novaRaia = mesmaRaia
+      ? sala.inimigo.raia
+      : RAIAS[raiaAtual + Math.sign(raiaAlvo - raiaAtual)]!;
+    const novaDistancia = mesmaDistancia
+      ? sala.inimigo.distancia
+      : DISTANCIAS[distanciaAtual + Math.sign(distanciaAlvo - distanciaAtual)]!;
+
+    return {
+      ...sala,
+      inimigo: { ...sala.inimigo, raia: novaRaia, distancia: novaDistancia },
+    };
+  }
+
+  const rolo = chance(sala.semente, CHANCE_DE_TELEGRAFAR_POR_TICK);
+  if (!rolo.acertou) return { ...sala, semente: rolo.semente };
+
+  return {
+    ...sala,
+    semente: rolo.semente,
+    inimigo: { ...sala.inimigo, telegrafandoPor: TELEGRAFO_DO_INIMIGO_EM_TICKS },
+  };
+}
+
+/** Chamada quando o telégrafo chega a zero — resolve o golpe e limpa o
+    telégrafo, independente de ter acertado. */
+export function resolverAtaqueDoInimigo(sala: Sala): Sala {
+  const acertou =
+    sala.jogador.raia === sala.inimigo.raia &&
+    sala.jogador.distancia === sala.inimigo.distancia &&
+    sala.jogador.esquivandoPor === 0;
+
+  return {
+    ...sala,
+    inimigo: { ...sala.inimigo, telegrafandoPor: null },
+    jogador: acertou
+      ? { ...sala.jogador, vida: Math.max(0, sala.jogador.vida - sala.inimigo.dano) }
+      : sala.jogador,
   };
 }
