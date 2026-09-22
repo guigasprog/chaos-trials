@@ -163,6 +163,8 @@ export interface NoDaArvore {
   podeComprar: boolean;
   /** O motivo de estar fechado, já resolvido pelo servidor. */
   impedimento: { motivo: string; detalhe: string } | null;
+  /** O que UM grau faz, em número — não só a frase de sabor. */
+  efeitoPorGrau: string;
 }
 
 export interface Arvore {

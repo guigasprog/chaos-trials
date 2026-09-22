@@ -8,6 +8,7 @@ import {
   adicionarPersonagem,
   ajusteDeElo,
   ANUNCIOS_POR_CONTA,
+  ATRIBUTO_DO_RAMO,
   duelar,
   ESPERA_DO_MESMO_ALVO_MS,
   faixaDeNivel,
@@ -239,15 +240,59 @@ function itemParaCliente(item: Item) {
   };
 }
 
+const NOME_ATRIBUTO: Record<string, string> = {
+  intelecto: "Intelecto",
+  presenca: "Presença",
+  destreza: "Destreza",
+  forca: "Força",
+  vigor: "Vigor",
+};
+
+const NOME_PASSIVA: Record<string, string> = {
+  danoPercentual: "dano",
+  vidaPercentual: "vida",
+  criticoAdicional: "chance de crítico",
+  reducaoAdicional: "redução de dano",
+  roubodeVida: "roubo de vida",
+  recargaReduzida: "recarga",
+};
+
+/**
+ * O efeito de UM grau, em português — pedido depois que a árvore só tinha a
+ * frase de sabor ("Todo dano que você causa aumenta") e nenhum número: dava
+ * para ver QUE tipo de coisa o nó fazia, não QUANTO.
+ */
+function efeitoPorGrau(no: (typeof ARVORE)[number], ramoDoPersonagem: number): string {
+  const efeito = no.efeito;
+  if (efeito.tipo === "magia") {
+    const h = habilidadePorId(efeito.habilidade);
+    return `Habilidade nova: "${h.nome}" — ${h.descricao}`;
+  }
+  if (efeito.tipo === "atributo") {
+    const atributo =
+      efeito.atributo === "doRamo"
+        ? ATRIBUTO_DO_RAMO[ramoDoPersonagem as 1 | 2 | 3 | 4 | 5]
+        : efeito.atributo;
+    return `+${efeito.valor} de ${NOME_ATRIBUTO[atributo]} por grau`;
+  }
+  // passiva: as de recarga são um número cheio; o resto é fração de 0 a 1.
+  const rotulo = NOME_PASSIVA[efeito.passiva];
+  return efeito.passiva === "recargaReduzida"
+    ? `−${efeito.valor} de recarga por grau`
+    : `+${Math.round(efeito.valor * 100)}% de ${rotulo} por grau`;
+}
+
 /**
  * A árvore como a tela precisa dela.
  *
  * O servidor manda o motivo de cada nó estar fechado, já resolvido. Deixar a
  * tela recalcular requisito e ponto seria duplicar regra nos dois lados — e
- * quando duplicada, ela diverge.
+ * quando duplicada, ela diverge. O mesmo vale para o efeito: a tela mostra o
+ * texto pronto, não reimplementa a fórmula de cada tipo de nó.
  */
 function arvoreParaCliente(p: Personagem) {
   const gastos = p.gastos ?? {};
+  const ramo = ramoDe(p.classe);
   return {
     pontos: pontosDisponiveis(p),
     nos: ARVORE.map((no) => {
@@ -265,6 +310,7 @@ function arvoreParaCliente(p: Personagem) {
         linha: no.linha,
         podeComprar: impede === null,
         impedimento: impede ? { motivo: impede.motivo, detalhe: impede.detalhe } : null,
+        efeitoPorGrau: efeitoPorGrau(no, ramo),
       };
     }),
     bonus: bonusDoPersonagem(p),

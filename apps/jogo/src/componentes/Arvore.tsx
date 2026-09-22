@@ -195,6 +195,18 @@ export function Arvore({
             {selecionado.descricao}
           </p>
 
+          {/* O número, não só a frase de sabor — e o total já garantido
+              quando algum grau já foi comprado, porque "+3 por grau" some a
+              conta que a pessoa teria que fazer de cabeça. */}
+          <p className="text-[0.88rem]" style={{ color: paleta.brilho }}>
+            {selecionado.efeitoPorGrau}
+            {selecionado.tipo !== "magia" && selecionado.comprados > 1 && (
+              <span className="ml-2 text-tinta-fraca">
+                ({selecionado.comprados}× comprado)
+              </span>
+            )}
+          </p>
+
           {selecionado.impedimento ? (
             <p className="text-[0.85rem] text-sangue">
               {selecionado.impedimento.detalhe}
