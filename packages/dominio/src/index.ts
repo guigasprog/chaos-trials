@@ -22,6 +22,8 @@ export {
   CHANCE_DE_VIDA_EXTRA,
   VIDAS_GUARDADAS_MAXIMO,
   PRECO_DO_AMULETO_DE_VIDA,
+  TICKS_POR_SEGUNDO,
+  TIMEOUT_DE_DESCONEXAO_MS,
 } from "./balanceamento.ts";
 export * from "./arvore.ts";
 export * from "./item.ts";

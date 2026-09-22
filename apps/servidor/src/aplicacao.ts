@@ -4,6 +4,7 @@ import Fastify, {
   type FastifyRequest,
 } from "fastify";
 import cors from "@fastify/cors";
+import websocket from "@fastify/websocket";
 import {
   adicionarPersonagem,
   ajusteDeElo,
@@ -123,6 +124,7 @@ import {
   chaveDoPersonagem,
   Filas,
 } from "./filas.ts";
+import { registrarRotasDeTempoReal, SalasTempoReal } from "./tempo-real.ts";
 
 /**
  * A API.
@@ -353,6 +355,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
    * acabou em duas mochilas e o vendedor recebeu duas vezes.
    */
   const filas = new Filas();
+  const salasTempoReal = new SalasTempoReal();
 
   /** Sufixo de id: aleatório mais tempo, para não colidir nem ordenar mal. */
   const novoSufixo = () =>
@@ -372,6 +375,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
   void app.register(cors, {
     origin: opcoes.origens && opcoes.origens.length > 0 ? [...opcoes.origens] : true,
   });
+  void app.register(websocket);
 
   /*
    * Corpo JSON vazio não é erro.
@@ -1947,6 +1951,8 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       }),
     };
   }
+
+  registrarRotasDeTempoReal(app, { armazenamento, agora, sessoes, salas: salasTempoReal });
 
   return app;
 }
