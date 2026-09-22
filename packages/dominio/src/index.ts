@@ -2,6 +2,7 @@ export * from "./grande.ts";
 export * from "./classe.ts";
 export * from "./atributos.ts";
 export * from "./progressao.ts";
+export * from "./dificuldade.ts";
 export * as balanceamento from "./balanceamento.ts";
 export * from "./aleatorio.ts";
 export * from "./efeitos.ts";
@@ -9,9 +10,17 @@ export * from "./habilidades.ts";
 export * from "./batalha.ts";
 export * from "./personagem.ts";
 export {
-  PREMIO_DO_JULGAMENTO,
   SLOTS_GRATIS,
   SLOTS_MAXIMO,
+  VIDAS_POR_DIFICULDADE,
+  DUREZA_POR_DIFICULDADE,
+  MULTIPLICADOR_DE_PREMIO_POR_DIFICULDADE,
+  CHANCE_DE_QUEDA_POR_DIFICULDADE,
+  SORTEIOS_POR_DIFICULDADE,
+  CHANCE_DE_FUGIR_POR_DIFICULDADE,
+  CHANCE_DE_VIDA_EXTRA,
+  VIDAS_GUARDADAS_MAXIMO,
+  PRECO_DO_AMULETO_DE_VIDA,
 } from "./balanceamento.ts";
 export * from "./arvore.ts";
 export * from "./item.ts";

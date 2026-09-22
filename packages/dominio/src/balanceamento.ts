@@ -1,3 +1,5 @@
+import type { Dificuldade } from "./dificuldade.ts";
+
 /**
  * Todo número que ajusta a sensação do jogo mora aqui.
  *
@@ -139,15 +141,7 @@ export const OFFLINE_RITMO = 0.35;
 // ── Batalhas e morte ─────────────────────────────────────────────────────
 
 /**
- * Quanto o julgamento rende a mais que uma batalha comum.
- *
- * O prêmio precisa pagar o risco. Sem diferença, ninguém aceitaria a aposta e
- * o julgamento seria letra morta.
- */
-export const PREMIO_DO_JULGAMENTO = 6;
-
-/**
- * Com quanta vida o personagem fica depois de recuar de uma batalha comum.
+ * Com quanta vida o personagem fica depois de recuar de uma derrota.
  *
  * ## Por que já foi 0,70
  *
@@ -181,35 +175,136 @@ export const VIDA_APOS_RECUAR = 0.12;
  *  preservado indefinidamente. */
 export const PRECO_REVIVE = 250;
 
-// ── Queda de item ────────────────────────────────────────────────────────
+// ── Dificuldade ──────────────────────────────────────────────────────────
+
+/*
+ * Antes o jogo tinha DUAS lutas: comum (sem risco de morrer) e julgamento
+ * (a única forma de morrer, pagando 6x). Virou dificuldade, escolhida na
+ * criação e fixa para a vida do personagem: TODA luta agora é a luta que
+ * paga o risco — o que muda por dificuldade é quantas vidas amortecem uma
+ * derrota antes da morte de fato, e o quanto monstro e prêmio escalam.
+ *
+ * Médio herda os números do antigo "comum"; difícil herda os do antigo
+ * "julgamento" — já medidos, não reinventados. Fácil é a única faixa nova,
+ * abaixo dos dois, para quem quer nível sem o mesmo tanto de aposta.
+ */
 
 /**
- * Chance de a batalha comum largar uma peça.
+ * Quantas derrotas o personagem aguenta antes de morrer de vez.
  *
- * Um terço, e não toda vitória: com queda garantida a mochila enche em
- * cinco lutas e a peça deixa de ser notícia. Com um terço, o achado
- * continua sendo um momento, e ainda cai rápido o bastante para a decisão
- * de equipar aparecer na primeira sessão.
+ * Perder QUALQUER luta agora consome uma vida — não só o antigo
+ * "julgamento". Sem a folga de mais de uma vida em fácil/médio, isso
+ * recriaria exatamente o desastre que o README já documenta (~25% de
+ * derrota por luta vira morte a cada 3-4 lutas, e permadeath frequente é
+ * extração, não dificuldade). Com a folga, perder uma luta comum custa
+ * uma vida da reserva, não o personagem inteiro.
  */
-export const CHANCE_DE_QUEDA_COMUM = 0.34;
+export const VIDAS_POR_DIFICULDADE: Readonly<Record<Dificuldade, number>> = {
+  facil: 3,
+  medio: 2,
+  dificil: 1,
+};
 
 /**
- * O julgamento SEMPRE larga.
+ * O quanto o monstro é mais duro, por dificuldade.
  *
- * É a luta em que se morre de verdade; sair dela de mãos vazias
- * transformaria o risco em aposta ruim. A garantia é metade do prêmio — a
- * outra é o sorteio dobrado logo abaixo.
+ * 1,05 no difícil é o antigo fator do julgamento, medido: 91% de vitória
+ * no nível 10, 67% no 50, 26% na parede — confortável cedo, risco real no
+ * meio. Médio fica em 1 (o antigo "comum", sem ajuste). Fácil em 0,85: o
+ * atributo entra duas vezes no poder (ofensiva e o que se aguenta), então
+ * 15% a menos de atributo é bem mais que 15% a menos de dificuldade.
  */
-export const CHANCE_DE_QUEDA_JULGAMENTO = 1;
+export const DUREZA_POR_DIFICULDADE: Readonly<Record<Dificuldade, number>> = {
+  facil: 0.85,
+  medio: 1,
+  dificil: 1.05,
+};
 
 /**
- * Quantos sorteios de raridade o julgamento faz, ficando com o melhor.
+ * Quanto a dificuldade rende a mais (ou a menos) em XP e sucata.
  *
- * Dobrar o sorteio é mais forte do que parece na cauda: a chance de peça
- * sagrada quase dobra, e é justamente a cauda que faz alguém aceitar
- * arriscar o personagem.
+ * Difícil em 6 é o antigo `PREMIO_DO_JULGAMENTO`: o prêmio precisa pagar o
+ * risco, sem ele ninguém aceitaria a aposta. Médio em 1 é o antigo
+ * "comum", sem ajuste. Fácil em 0,7 é o preço da folga: monstro mais
+ * fraco E prêmio menor, senão fácil seria estritamente melhor que médio.
  */
-export const SORTEIOS_DO_JULGAMENTO = 2;
+export const MULTIPLICADOR_DE_PREMIO_POR_DIFICULDADE: Readonly<Record<Dificuldade, number>> = {
+  facil: 0.7,
+  medio: 1,
+  dificil: 6,
+};
+
+/**
+ * Chance de uma vitória largar uma peça, por dificuldade.
+ *
+ * Médio em 0,34 é o antigo `CHANCE_DE_QUEDA_COMUM`. Difícil em 1 (sempre
+ * larga) é o antigo `CHANCE_DE_QUEDA_JULGAMENTO` — sair de mãos vazias de
+ * uma luta em que se arriscou a vida seria aposta ruim. Fácil em 0,22 é
+ * abaixo do médio, coerente com pagar menos por arriscar menos.
+ */
+export const CHANCE_DE_QUEDA_POR_DIFICULDADE: Readonly<Record<Dificuldade, number>> = {
+  facil: 0.22,
+  medio: 0.34,
+  dificil: 1,
+};
+
+/**
+ * Quantos sorteios de raridade uma queda faz, ficando com o melhor.
+ *
+ * Só o difícil dobra (era `SORTEIOS_DO_JULGAMENTO`): a chance de peça
+ * sagrada quase dobra, e é a cauda que faz alguém aceitar arriscar a
+ * última vida.
+ */
+export const SORTEIOS_POR_DIFICULDADE: Readonly<Record<Dificuldade, number>> = {
+  facil: 1,
+  medio: 1,
+  dificil: 2,
+};
+
+/**
+ * Chance-base de fugir de uma luta em vez de lutar (ou perder).
+ *
+ * Ajustada pela vida que sobra no monstro — fugir de algo quase morto é
+ * mais fácil que fugir de algo intacto (ver `chanceDeFugir` em
+ * `batalha.ts`). Cai com a dificuldade: quem escolheu o risco maior tem
+ * mais dificuldade de recuar dele. Fugir falho não pune além de perder o
+ * turno — a luta continua, o monstro age normalmente.
+ */
+export const CHANCE_DE_FUGIR_POR_DIFICULDADE: Readonly<Record<Dificuldade, number>> = {
+  facil: 0.75,
+  medio: 0.6,
+  dificil: 0.45,
+};
+
+// ── Vida extra ───────────────────────────────────────────────────────────
+
+/**
+ * Chance de uma vitória render uma vida extra guardada, além da peça
+ * normal — independente da dificuldade, porque é o prêmio raro que faz
+ * qualquer nível valer a pena continuar tentando.
+ *
+ * 1%, como pedido: raro o bastante para ser notícia quando cai.
+ */
+export const CHANCE_DE_VIDA_EXTRA = 0.01;
+
+/**
+ * Teto de vidas guardadas ao mesmo tempo.
+ *
+ * Sem teto, quem farma muito acumula uma pilha e o permadeath deixa de
+ * significar algo. Com 3, ainda é um colchão real — mas um colchão, não
+ * uma armadura.
+ */
+export const VIDAS_GUARDADAS_MAXIMO = 3;
+
+/**
+ * Preço do amuleto de vida extra na loja, em moeda premium.
+ *
+ * Mais caro que o revive (`PRECO_REVIVE`, 250): o revive tira do túmulo
+ * depois que a morte já aconteceu; o amuleto EVITA a morte seguinte. Sair
+ * mais barato que a rede de segurança que ele substitui faria o revive
+ * virar a opção de otário.
+ */
+export const PRECO_DO_AMULETO_DE_VIDA = 400;
 
 // ── Vida entre batalhas ──────────────────────────────────────────────────
 

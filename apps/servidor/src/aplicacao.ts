@@ -32,6 +32,7 @@ import {
   comprarSlot,
   type Conta,
   creditarPremium,
+  contasNoMesmoIp,
   criarConta,
   criarPersonagem,
   custoDoRevive,
@@ -75,7 +76,6 @@ import {
   habilidadePorId as buscarHabilidade,
   habilidadePorId,
   habilidadesDisponiveis,
-  morrer,
   nivelDaParede,
   normalizar,
   podeComprar,
@@ -88,17 +88,26 @@ import {
   renascer,
   reviver,
   subclassesDisponiveis,
-  recuar,
   vidaAposVitoria,
   vidaMaximaDe,
   xpParaNivel,
+  chance,
+  type Dificuldade,
+  DIFICULDADES,
+  perderBatalha,
+  ganharVidaGuardada,
+  CHANCE_DE_QUEDA_POR_DIFICULDADE,
+  SORTEIOS_POR_DIFICULDADE,
+  CHANCE_DE_VIDA_EXTRA,
+  VIDAS_GUARDADAS_MAXIMO,
+  PRECO_DO_AMULETO_DE_VIDA,
 } from "@chaos/dominio";
 import type { Armazenamento } from "./armazenamento.ts";
 import {
   Batalhas,
+  chanceDeFugir,
   ErroDeBatalha,
   premioDe,
-  type TipoDeBatalha,
 } from "./batalhas.ts";
 import {
   conferirSenha,
@@ -182,6 +191,10 @@ function paraCliente(p: Personagem) {
     parede: Math.ceil(nivelDaParede(p.camada)),
     elo: p.elo,
     duelos: p.duelos,
+    dificuldade: p.dificuldade,
+    vidasRestantes: p.vidasRestantes,
+    vidasGuardadas: p.vidasGuardadas,
+    vidasGuardadasMaximo: VIDAS_GUARDADAS_MAXIMO,
     podeRenascer: prontoParaRenascer(p),
     subclasses: subclassesDisponiveis(p).map((i) => {
       const c = classePorIndice(i);
@@ -521,11 +534,19 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       email,
       senha: await guardarSenha(senha),
       agora: agora(),
+      // Só sinal, nunca trava — ver o comentário em `Conta.ip`. `pedido.ip`
+      // já resolve X-Forwarded-For quando o Fastify roda atrás de um proxy
+      // configurado (`trustProxy`); sem isso, é o IP de conexão cru.
+      ...(pedido.ip ? { ip: pedido.ip } : {}),
     });
     await armazenamento.contas.salvar(conta);
 
     const token = sessoes.abrir(conta.id, agora());
-    return resposta.status(201).send({ token, conta: contaParaCliente(conta) });
+    return resposta.status(201).send({
+      token,
+      conta: contaParaCliente(conta),
+      sinalDeIp: { contasNoMesmoIp: contasNoMesmoIp(existentes, conta) },
+    });
   });
 
   /**
@@ -612,13 +633,22 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     const conta = await exigirConta(pedido, resposta);
     if (!conta) return;
 
-    const corpo = pedido.body as { nome?: string; classe?: number };
+    const corpo = pedido.body as {
+      nome?: string;
+      classe?: number;
+      dificuldade?: Dificuldade;
+    };
     const nome = (corpo?.nome ?? "").trim();
     if (nome.length < 2 || nome.length > 24) {
       return resposta.status(400).send({ erro: "o nome precisa ter de 2 a 24 letras" });
     }
     if (typeof corpo?.classe !== "number") {
       return resposta.status(400).send({ erro: "escolha uma classe" });
+    }
+    // Sem escolha, "médio" — o meio-termo. Escolha inválida é recusada, e
+    // não silenciosamente trocada: quem mandou "impossivel" queria saber.
+    if (corpo.dificuldade !== undefined && !DIFICULDADES.includes(corpo.dificuldade)) {
+      return resposta.status(400).send({ erro: "dificuldade inválida" });
     }
     return filas.executar(chaveDaConta(conta.id), async () => {
       // Relido sob a trava: duas criações simultâneas veriam o mesmo
@@ -637,6 +667,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
         nome,
         classeRaiz: corpo.classe!,
         agora: agora(),
+        ...(corpo.dificuldade ? { dificuldade: corpo.dificuldade } : {}),
       });
       // A conta primeiro: se gravar o personagem e falhar ao ligá-lo à
       // conta, ele fica órfão no cofre e ninguém o alcança. Na ordem
@@ -724,17 +755,17 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       return resposta.status(409).send({ erro: "sem vida para lutar" });
     }
 
-    const corpo = pedido.body as { tipo?: TipoDeBatalha } | undefined;
-    const tipo: TipoDeBatalha =
-      corpo?.tipo === "julgamento" ? "julgamento" : "comum";
-
-    const sessao = batalhas.iniciar(personagem, agora(), tipo);
+    // Não se escolhe mais o tipo de luta por chamada: a dificuldade é do
+    // PERSONAGEM, fixa desde a criação, e toda luta carrega o risco dela.
+    const sessao = batalhas.iniciar(personagem, agora());
     return resposta.status(201).send({
       id: sessao.id,
-      tipo,
-      // Dito na resposta, e não só no comentário: a tela precisa avisar antes
-      // que esta é a luta em que se morre de verdade.
-      mortal: tipo === "julgamento",
+      dificuldade: sessao.dificuldade,
+      // Dito na resposta, e não só no comentário: a tela precisa avisar
+      // quantas vidas cobrem esta luta antes da morte de vez.
+      vidasRestantes: personagem.vidasRestantes,
+      vidasGuardadas: personagem.vidasGuardadas,
+      chanceDeFugir: chanceDeFugir(sessao),
       estado: estadoDaBatalha(sessao),
       // A abertura do inimigo entra aqui: quando ele é mais ágil, já agiu
       // antes de o jogador poder fazer qualquer coisa, e a tela precisa
@@ -751,9 +782,9 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     const conta = await exigirConta(pedido, resposta);
     if (!conta) return;
     const { id } = pedido.params as { id: string };
-    const corpo = pedido.body as { habilidade?: string };
-    if (!corpo?.habilidade) {
-      return resposta.status(400).send({ erro: "diga qual habilidade" });
+    const corpo = pedido.body as { habilidade?: string; fugir?: boolean };
+    if (!corpo?.habilidade && !corpo?.fugir) {
+      return resposta.status(400).send({ erro: "diga qual habilidade, ou fuja" });
     }
 
     // A batalha também tem dono. Sem esta conferência, quem adivinhasse o id
@@ -763,7 +794,31 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       return resposta.status(404).send({ erro: "batalha não encontrada" });
     }
 
-    const { sessao, eventos } = batalhas.agir(id, corpo.habilidade);
+    if (corpo.fugir) {
+      const { sessao, eventos, sucesso } = batalhas.fugir(id);
+      if (sucesso) {
+        // A luta acaba aqui, sem prêmio e sem vida perdida — não passa por
+        // `concluir`, que é só para vitória ou derrota de verdade. O
+        // personagem não mudou nada; recarrega só para devolver a ficha
+        // atual, como todo `resultado` já faz.
+        batalhas.encerrar(id);
+        const dono = await meuPersonagem(conta, emAndamento.personagemId, resposta);
+        if (!dono) return;
+        return {
+          estado: estadoDaBatalha(sessao),
+          eventos,
+          resultado: { fugiu: true, personagem: paraCliente(dono.personagem) },
+        };
+      }
+      return {
+        estado: estadoDaBatalha(sessao),
+        eventos,
+        resultado: null,
+        chanceDeFugir: sessao.batalha.vencedor ? undefined : chanceDeFugir(sessao),
+      };
+    }
+
+    const { sessao, eventos } = batalhas.agir(id, corpo.habilidade!);
 
     // Terminou: é aqui que o resultado vira progresso gravado. Antes disso,
     // nada do que aconteceu na batalha toca o personagem.
@@ -785,37 +840,48 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       batalhas.encerrar(id);
     }
 
-    return { estado: estadoDaBatalha(sessao), eventos, resultado };
+    return {
+      estado: estadoDaBatalha(sessao),
+      eventos,
+      resultado,
+      chanceDeFugir: sessao.batalha.vencedor ? undefined : chanceDeFugir(sessao),
+    };
   });
 
   async function concluir(guardado: Personagem, sessao: ReturnType<Batalhas["iniciar"]>) {
     const venceu = sessao.batalha.vencedor === "jogador";
 
     if (!venceu) {
-      // A distinção central: só o julgamento mata, porque só nele a pessoa
-      // escolheu arriscar. Perder uma batalha comum é recuar ferido.
-      //
-      // Medido antes de decidir: com ~25% de derrota por luta, derrota
-      // significando morte dava uma morte a cada 3 ou 4 batalhas — e com
-      // permadeath e revive pago em moeda comprada, isso não é dificuldade,
-      // é extração.
-      const depois =
-        sessao.tipo === "julgamento"
-          ? morrer({ ...guardado, vida: 0 })
-          : recuar(guardado);
+      /*
+       * Toda derrota agora consome uma vida da dificuldade — não só o
+       * antigo "julgamento". `perderBatalha` decide: com folga, recua;
+       * na última vida, uma vida guardada cobre (se houver); sem as
+       * duas, morre de vez.
+       *
+       * Medido antes de decidir: com ~25% de derrota por luta, derrota
+       * significando morte dava uma morte a cada 3 ou 4 batalhas — e com
+       * permadeath e revive pago em moeda comprada, isso não é dificuldade,
+       * é extração. É por isso que a dificuldade dá MAIS de uma vida a
+       * quem escolhe fácil ou médio.
+       */
+      const antes = guardado.vidasGuardadas;
+      const depois = perderBatalha(guardado);
       await armazenamento.personagens.salvar(depois);
       return {
         venceu: false,
         xp: 0,
         sucata: 0,
         niveisSubidos: 0,
-        morreu: sessao.tipo === "julgamento",
-        recuou: sessao.tipo !== "julgamento",
+        morreu: depois.estado === "tumulo",
+        recuou: depois.estado !== "tumulo",
+        vidaGuardadaUsada: depois.vidasGuardadas < antes,
+        vidasRestantes: depois.vidasRestantes,
+        vidasGuardadas: depois.vidasGuardadas,
         personagem: paraCliente(depois),
       };
     }
 
-    const premio = premioDe(sessao.nivelInicial, sessao.tipo);
+    const premio = premioDe(sessao.nivelInicial, sessao.dificuldade);
     const ganho = ganharXp(guardado, premio.xp);
     /*
      * A vida com que o herói SAIU da luta.
@@ -847,7 +913,8 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       ramo: ramoDe(atualizado.classe),
       semente: sementeDe(`${sessao.personagemId}:${sessao.id}:queda`),
       id: `it${novoSufixo()}`,
-      mortal: sessao.tipo === "julgamento",
+      chanceDeCair: CHANCE_DE_QUEDA_POR_DIFICULDADE[sessao.dificuldade],
+      sorteios: SORTEIOS_POR_DIFICULDADE[sessao.dificuldade],
     });
 
     let queda = null;
@@ -865,6 +932,23 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       }
     }
 
+    /*
+     * A vida extra — rara, independente da dificuldade e da queda normal.
+     * Sorteio à parte, com semente própria: não pode competir pelo mesmo
+     * sorteio que decide a peça, senão os dois ficam ligados por acidente.
+     */
+    let vidaExtra = false;
+    if (atualizado.vidasGuardadas < VIDAS_GUARDADAS_MAXIMO) {
+      const rolo = chance(
+        sementeDe(`${sessao.personagemId}:${sessao.id}:vidaextra`),
+        CHANCE_DE_VIDA_EXTRA,
+      );
+      if (rolo.acertou) {
+        atualizado = ganharVidaGuardada(atualizado);
+        vidaExtra = true;
+      }
+    }
+
     await armazenamento.personagens.salvar(atualizado);
 
     return {
@@ -875,6 +959,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       morreu: false,
       recuou: false,
       queda,
+      vidaExtra,
       personagem: paraCliente(atualizado),
     };
   }
@@ -1430,7 +1515,61 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
         moeda: v.moeda,
       })),
       proximaTrocaEm: proximaTrocaDaLojaEm(agora()),
+      // Não roda: é o amuleto de vida extra, sempre à venda, à parte das
+      // seis vagas — ver `POST /loja/amuleto`.
+      amuleto: { preco: PRECO_DO_AMULETO_DE_VIDA, moeda: "premium" as const },
     };
+  });
+
+  /**
+   * O amuleto de vida extra.
+   *
+   * Não é um `Item` — não veste, não ocupa a mochila, não tem raridade.
+   * Comprar já entrega o efeito na hora: uma vida guardada a mais, até o
+   * teto de `VIDAS_GUARDADAS_MAXIMO`. É o outro caminho até a vida extra,
+   * além do sorteio raro de `CHANCE_DE_VIDA_EXTRA` em `concluir`.
+   */
+  app.post("/loja/amuleto", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const corpo = pedido.body as { personagem?: string };
+    if (!corpo?.personagem) {
+      return resposta.status(400).send({ erro: "diga qual personagem recebe" });
+    }
+
+    return filas.executarEm(
+      [chaveDaConta(conta.id), chaveDoPersonagem(corpo.personagem)],
+      async () => {
+        const atual = normalizarConta(
+          (await armazenamento.contas.buscar(conta.id)) as Conta,
+        );
+        const carregado = await meuPersonagem(atual, corpo.personagem!, resposta);
+        if (!carregado) return;
+        const comprador = carregado.personagem;
+
+        if (comprador.vidasGuardadas >= VIDAS_GUARDADAS_MAXIMO) {
+          return resposta
+            .status(409)
+            .send({ erro: `já está no teto de ${VIDAS_GUARDADAS_MAXIMO} vidas guardadas` });
+        }
+        if (atual.premium < PRECO_DO_AMULETO_DE_VIDA) {
+          return resposta.status(400).send({
+            erro: `custa ${PRECO_DO_AMULETO_DE_VIDA} e você tem ${atual.premium}`,
+          });
+        }
+
+        await armazenamento.contas.salvar(
+          debitarPremium(atual, PRECO_DO_AMULETO_DE_VIDA),
+        );
+        const comprado = ganharVidaGuardada(comprador);
+        await armazenamento.personagens.salvar(comprado);
+
+        return {
+          pagou: PRECO_DO_AMULETO_DE_VIDA,
+          personagem: paraCliente(comprado),
+        };
+      },
+    );
   });
 
   app.post("/loja/comprar", async (pedido, resposta) => {

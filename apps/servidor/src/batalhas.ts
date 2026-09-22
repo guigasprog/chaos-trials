@@ -2,7 +2,10 @@ import {
   atributosDe,
   type Batalha,
   bonusDoPersonagem,
+  chance,
   criarCombatente,
+  type Dificuldade,
+  DUREZA_POR_DIFICULDADE,
   equilibrio,
   type Evento,
   executarTurno,
@@ -10,9 +13,10 @@ import {
   habilidadesDisponiveis,
   habilidadesTotais,
   iniciarBatalha,
+  MULTIPLICADOR_DE_PREMIO_POR_DIFICULDADE,
   type Personagem,
   ramoDe,
-  PREMIO_DO_JULGAMENTO,
+  CHANCE_DE_FUGIR_POR_DIFICULDADE,
   recompensaDe,
   sementeDe,
 } from "@chaos/dominio";
@@ -30,19 +34,12 @@ import {
  * batalha termina.
  */
 
-/**
- * Comum ou julgamento.
- *
- * Perder uma comum é recuar. Perder um julgamento é morrer de verdade, e é a
- * única forma de morrer no jogo — porque é a única em que a pessoa escolheu
- * arriscar. Em troca, o julgamento paga muito mais.
- */
-export type TipoDeBatalha = "comum" | "julgamento";
-
 export interface Sessao {
   readonly id: string;
   readonly personagemId: string;
-  readonly tipo: TipoDeBatalha;
+  /** A dificuldade do personagem NO INSTANTE em que a luta começou — ela é
+      fixa por personagem, mas ler daqui evita reconsultar o registro. */
+  readonly dificuldade: Dificuldade;
   readonly batalha: Batalha;
   /** O que o inimigo fez antes da primeira vez do herói, quando ele é mais ágil. */
   readonly aberturaDoInimigo: readonly Evento[];
@@ -58,8 +55,14 @@ export class Batalhas {
   private readonly sessoes = new Map<string, Sessao>();
   private contador = 0;
 
-  /** Monta o encontro apropriado para o personagem. */
-  iniciar(p: Personagem, agora: number, tipo: TipoDeBatalha = "comum"): Sessao {
+  /**
+   * Monta o encontro apropriado para o personagem.
+   *
+   * A dificuldade não é mais escolhida por luta — é a do PERSONAGEM,
+   * fixa desde a criação. Não existe mais "qual luta eu vou fazer agora":
+   * existe só "lutar", e a dificuldade decide o quanto ela pesa.
+   */
+  iniciar(p: Personagem, agora: number): Sessao {
     const ramo = ramoDe(p.classe);
 
     const heroi = criarCombatente({
@@ -80,7 +83,7 @@ export class Batalhas {
       nome: "Sombra do Caos",
       lado: "inimigo",
       ramo: 4,
-      atributos: oponenteDe(p, tipo),
+      atributos: oponenteDe(p),
       habilidades: habilidadesDe(4, p.nivel)
         .map((h) => h.id)
         // O inimigo não se cura: uma luta por turnos contra algo que se cura
@@ -103,14 +106,14 @@ export class Batalhas {
      */
     const inicial = iniciarBatalha(
       [heroi, vilao],
-      sementeDe(`${p.id}:${p.camada}:${p.nivel}:${tipo}:${agora}`),
+      sementeDe(`${p.id}:${p.camada}:${p.nivel}:${p.dificuldade}:${agora}`),
     );
     const { batalha, eventos } = adiantarAteOHeroi(inicial);
 
     const sessao: Sessao = {
       id,
       personagemId: p.id,
-      tipo,
+      dificuldade: p.dificuldade,
       batalha,
       aberturaDoInimigo: eventos,
       nivelInicial: p.nivel,
@@ -159,6 +162,46 @@ export class Batalhas {
     const atualizada: Sessao = { ...sessao, batalha: depois.batalha };
     this.sessoes.set(sessaoId, atualizada);
     return { sessao: atualizada, eventos };
+  }
+
+  /**
+   * Tenta fugir em vez de lutar (ou de continuar perdendo).
+   *
+   * Sucesso encerra a luta ali mesmo — sem vida perdida, sem prêmio, e sem
+   * turno gasto de verdade: nada é jogado pelo `executarTurno`. Falha PERDE
+   * o turno (um passe de propósito, `executarTurno(b, null)`) e o inimigo
+   * age normalmente na sequência — fugir malsucedido custa a ação, não a
+   * luta inteira.
+   */
+  fugir(sessaoId: string): { sessao: Sessao; eventos: Evento[]; sucesso: boolean } {
+    const sessao = this.sessoes.get(sessaoId);
+    if (!sessao) throw new ErroDeBatalha(404, "batalha não encontrada");
+    if (sessao.batalha.vencedor) {
+      throw new ErroDeBatalha(409, "esta batalha já terminou");
+    }
+
+    const atuante = sessao.batalha.ordem[sessao.batalha.vez];
+    if (atuante !== "heroi") {
+      throw new ErroDeBatalha(409, "não é a sua vez");
+    }
+
+    const rolo = chance(
+      sementeDe(`fuga:${sessaoId}:${sessao.batalha.rodada}:${sessao.batalha.semente}`),
+      chanceDeFugir(sessao),
+    );
+
+    if (rolo.acertou) {
+      const eventos: Evento[] = [{ tipo: "fugiu", quem: "heroi" }];
+      return { sessao, eventos, sucesso: true };
+    }
+
+    const doHeroi = executarTurno(sessao.batalha, null);
+    const depois = adiantarAteOHeroi(doHeroi);
+    const eventos: Evento[] = [...doHeroi.eventos, ...depois.eventos];
+
+    const atualizada: Sessao = { ...sessao, batalha: depois.batalha };
+    this.sessoes.set(sessaoId, atualizada);
+    return { sessao: atualizada, eventos, sucesso: false };
   }
 
   encerrar(id: string): void {
@@ -221,21 +264,12 @@ export class ErroDeBatalha extends Error {
  * ofensiva e outra no que se aguenta. Aplicá-lo cru dobraria o efeito
  * pretendido.
  */
-function oponenteDe(p: Personagem, tipo: TipoDeBatalha) {
+function oponenteDe(p: Personagem) {
   const base = atributosDe(4, p.nivel);
-  /*
-   * O quanto o julgamento é mais duro.
-   *
-   * 1,05 parece pouco e não é: o atributo entra duas vezes no poder — uma na
-   * ofensiva, outra no que se aguenta —, então 5% a mais de atributo vira
-   * cerca de 10% a mais de poder. A primeira tentativa usou 1,35 e a medição
-   * mostrou o estrago: 8% de vitória no nível 10 e 1% no 100.
-   *
-   * Medido com 1,05: 91% de vitória no nível 10, 67% no 50, 26% na parede. É
-   * a curva desejada — confortável cedo, risco real no meio, e na parede o
-   * sinal de que a hora é de renascer, não de apostar.
-   */
-  const dureza = tipo === "julgamento" ? 1.05 : 1;
+  // Ver `DUREZA_POR_DIFICULDADE` em balanceamento.ts para a medição — 1,05
+  // (difícil, o antigo julgamento) dá 91%/67%/26% de vitória em
+  // nível 10/50/parede.
+  const dureza = DUREZA_POR_DIFICULDADE[p.dificuldade];
   const fator =
     Math.max(0.2, (1 / equilibrio(p.classe, p.nivel, p.camada)) ** 0.5) * dureza;
   const ajusta = (v: number) => Math.max(1, Math.round(v * fator));
@@ -248,12 +282,22 @@ function oponenteDe(p: Personagem, tipo: TipoDeBatalha) {
   };
 }
 
-/** O que a vitória rende. O julgamento paga o risco que cobrou. */
-export function premioDe(nivel: number, tipo: TipoDeBatalha = "comum") {
+/** O que a vitória rende. Ver `MULTIPLICADOR_DE_PREMIO_POR_DIFICULDADE`. */
+export function premioDe(nivel: number, dificuldade: Dificuldade) {
   const base = recompensaDe(nivel, true);
-  if (tipo !== "julgamento") return base;
-  return {
-    xp: base.xp * PREMIO_DO_JULGAMENTO,
-    sucata: base.sucata * PREMIO_DO_JULGAMENTO,
-  };
+  const mult = MULTIPLICADOR_DE_PREMIO_POR_DIFICULDADE[dificuldade];
+  return { xp: base.xp * mult, sucata: base.sucata * mult };
+}
+
+/**
+ * Chance de fugir com sucesso — a base da dificuldade, ajustada pela vida
+ * que sobra no vilão: fugir de algo quase morto é mais fácil que fugir de
+ * algo intacto. `0,7 + 0,3 * fração` mantém a base como o piso (vilão
+ * cheio) e sobe até 30% a mais quando ele está no fio da vida.
+ */
+export function chanceDeFugir(sessao: Sessao): number {
+  const vilao = sessao.batalha.combatentes.vilao;
+  const fracaoDeVida = vilao ? vilao.vida / vilao.vidaMaxima : 1;
+  const base = CHANCE_DE_FUGIR_POR_DIFICULDADE[sessao.dificuldade];
+  return Math.min(1, base * (0.7 + 0.3 * fracaoDeVida));
 }

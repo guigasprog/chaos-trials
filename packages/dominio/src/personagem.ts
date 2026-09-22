@@ -42,7 +42,10 @@ import {
   PRECO_REVIVE,
   SUCATA_INICIAL,
   VIDA_APOS_RECUAR,
+  VIDAS_POR_DIFICULDADE,
+  VIDAS_GUARDADAS_MAXIMO,
 } from "./balanceamento.ts";
+import { type Dificuldade, DIFICULDADES } from "./dificuldade.ts";
 import { habilidadesDe } from "./habilidades.ts";
 import {
   equilibrio,
@@ -95,6 +98,23 @@ export interface Personagem {
   readonly elo: number;
   /** Vitórias e derrotas em duelos, contando os dois lados. */
   readonly duelos: { vitorias: number; derrotas: number; defesas: number };
+  /**
+   * Escolhida na criação, fixa para a vida do personagem — muda a curva de
+   * monstro e de recompensa, e trocar no meio quebraria a curva medida.
+   */
+  readonly dificuldade: Dificuldade;
+  /**
+   * Quantas derrotas ainda aguenta antes de morrer de vez. Começa no teto
+   * de `VIDAS_POR_DIFICULDADE` e cai a cada luta perdida — ver
+   * `perderBatalha`. Chegar a zero é o túmulo.
+   */
+  readonly vidasRestantes: number;
+  /**
+   * Vidas extras GUARDADAS — a reserva rara que soma além das vidas da
+   * dificuldade, achada em combate ou comprada na loja. Some para cobrir a
+   * morte só quando `vidasRestantes` já chegaria a zero.
+   */
+  readonly vidasGuardadas: number;
 }
 
 export function criarPersonagem(dados: {
@@ -102,11 +122,17 @@ export function criarPersonagem(dados: {
   nome: string;
   classeRaiz: number;
   agora: number;
+  /** Padrão "médio" — o meio-termo, sem escolha explícita. */
+  dificuldade?: Dificuldade;
 }): Personagem {
   if (!RAIZES.some((c) => c.indice === dados.classeRaiz)) {
     throw new Error(
       `só se começa numa das cinco raízes, não em ${dados.classeRaiz}`,
     );
+  }
+  const dificuldade = dados.dificuldade ?? "medio";
+  if (!DIFICULDADES.includes(dificuldade)) {
+    throw new Error(`dificuldade inválida: ${dificuldade}`);
   }
 
   return {
@@ -126,6 +152,9 @@ export function criarPersonagem(dados: {
     mochila: [],
     elo: ELO_INICIAL,
     duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+    dificuldade,
+    vidasRestantes: VIDAS_POR_DIFICULDADE[dificuldade],
+    vidasGuardadas: 0,
   };
 }
 
@@ -143,8 +172,20 @@ export function criarPersonagem(dados: {
 export function normalizar(p: Personagem): Personagem {
   const inteiro = Math.round(p.xp);
   const completo =
-    p.gastos && p.mochila && p.equipado && p.elo !== undefined && p.duelos;
+    p.gastos &&
+    p.mochila &&
+    p.equipado &&
+    p.elo !== undefined &&
+    p.duelos &&
+    p.dificuldade !== undefined &&
+    p.vidasRestantes !== undefined &&
+    p.vidasGuardadas !== undefined;
   if (completo && p.xp === inteiro) return p;
+  // Personagem gravado antes da dificuldade existir: "médio" é o meio-termo
+  // sem escolha explícita, e as vidas restantes começam no teto dele — não
+  // em zero, que mataria na primeira derrota alguém que nunca escolheu
+  // arriscar tanto.
+  const dificuldade: Dificuldade = p.dificuldade ?? "medio";
   return {
     ...p,
     gastos: p.gastos ?? zerar(),
@@ -152,6 +193,9 @@ export function normalizar(p: Personagem): Personagem {
     mochila: p.mochila ?? [],
     elo: p.elo ?? ELO_INICIAL,
     duelos: p.duelos ?? { vitorias: 0, derrotas: 0, defesas: 0 },
+    dificuldade,
+    vidasRestantes: p.vidasRestantes ?? VIDAS_POR_DIFICULDADE[dificuldade],
+    vidasGuardadas: p.vidasGuardadas ?? 0,
     xp: inteiro,
   };
 }
@@ -435,6 +479,10 @@ export function reviver(p: Personagem, premiumDaConta: number): Revive {
     ...p,
     estado: "vivo",
     vida: Math.max(1, Math.round(vidaMaximaDe(p) * 0.3)),
+    // Vida nova, vidas cheias — a reserva da dificuldade volta ao teto. A
+    // vida GUARDADA (a rara) não: essa é história de fora desta luta e
+    // continua onde estava.
+    vidasRestantes: VIDAS_POR_DIFICULDADE[p.dificuldade],
   };
   return { personagem, pagou: PRECO_REVIVE };
 }
@@ -482,6 +530,8 @@ export function renascer(p: Personagem, classeRaiz: number): Personagem {
     // renascer troca o ramo. Mantendo os gastos, uma build montada para força
     // continuaria rodando num mago.
     gastos: zerar(),
+    // Vida nova, vidas cheias — mesma lógica do revive.
+    vidasRestantes: VIDAS_POR_DIFICULDADE[p.dificuldade],
   };
 }
 
@@ -592,17 +642,16 @@ export function curaPorDescanso(p: Personagem, horas: number): number {
 }
 
 /**
- * Perder uma batalha comum é recuar, não morrer.
+ * Perder uma batalha é recuar, não morrer direto — a peça que faltava, e a
+ * medição obrigou a ela: com ~25% de derrota por luta, perder significando
+ * morte dava uma morte a cada 3 ou 4 batalhas. Com permadeath e revive
+ * pago em moeda comprada, isso não é dificuldade — é uma máquina de
+ * extração, e foi construída sem ninguém decidir que seria assim.
  *
- * Esta é a peça que faltava, e a medição obrigou a ela: com ~25% de derrota
- * por luta, perder significando morte dava uma morte a cada 3 ou 4 batalhas.
- * Com permadeath e revive pago em moeda comprada, isso não é dificuldade — é
- * uma máquina de extração, e foi construída sem ninguém decidir que seria
- * assim.
- *
- * A morte permanente continua existindo, e continua sendo permadeath. Ela só
- * passa a acontecer onde a pessoa ESCOLHEU arriscar: no julgamento. É o que o
- * nome do jogo já dizia.
+ * `recuar` sozinho não decide mais quem morre: quem decide é
+ * `perderBatalha`, logo abaixo, que soma isto à conta de vidas da
+ * dificuldade. `recuar` continua existindo porque `progredirOffline` usa
+ * exatamente este resto — o offline nunca risca vida, de propósito.
  *
  * O quanto sobra está em `VIDA_APOS_RECUAR`, e o número lá tem uma história:
  * com os 35% originais o personagem não morria nem conseguia voltar.
@@ -619,6 +668,35 @@ export function recuar(p: Personagem): Personagem {
    * jogo.
    */
   return { ...p, vida: Math.max(1, Math.round(vidaMaximaDe(p) * VIDA_APOS_RECUAR)) };
+}
+
+/**
+ * A conta de vidas depois de perder uma luta.
+ *
+ * Toda derrota agora consome uma vida da dificuldade — não só o antigo
+ * "julgamento". Com folga (`vidasRestantes > 1`), é `recuar` e a conta
+ * desce. Sem folga, uma vida guardada (rara, achada ou comprada) cobre a
+ * queda antes de morrer de vez. Só sem as duas é que morre.
+ */
+export function perderBatalha(p: Personagem): Personagem {
+  const restantes = p.vidasRestantes - 1;
+  if (restantes > 0) return { ...recuar(p), vidasRestantes: restantes };
+  if (p.vidasGuardadas > 0) {
+    return { ...recuar(p), vidasRestantes: 1, vidasGuardadas: p.vidasGuardadas - 1 };
+  }
+  return { ...morrer(p), vidasRestantes: 0 };
+}
+
+/**
+ * Soma uma vida guardada — de uma queda rara em combate, ou comprada na
+ * loja. Com teto (`VIDAS_GUARDADAS_MAXIMO`): sem ele, farmar muito
+ * acumula uma pilha e o permadeath deixa de significar algo.
+ */
+export function ganharVidaGuardada(p: Personagem): Personagem {
+  return {
+    ...p,
+    vidasGuardadas: Math.min(VIDAS_GUARDADAS_MAXIMO, p.vidasGuardadas + 1),
+  };
 }
 
 export interface RelatorioOffline {

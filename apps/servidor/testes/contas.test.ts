@@ -72,6 +72,28 @@ describe("cadastro", () => {
     await app.close();
   });
 
+  it("sinaliza contas nascidas do mesmo IP, sem impedir o cadastro", async () => {
+    // Só sinal — nunca trava. Duas contas do mesmo IP nascem as duas.
+    const { app } = montar();
+    const primeira = await app.inject({
+      method: "POST",
+      url: "/contas",
+      payload: { email: "um@exemplo.com", senha: "uma senha comprida" },
+      remoteAddress: "203.0.113.9",
+    });
+    assert.equal(primeira.json().sinalDeIp.contasNoMesmoIp, 0);
+
+    const segunda = await app.inject({
+      method: "POST",
+      url: "/contas",
+      payload: { email: "dois@exemplo.com", senha: "uma senha comprida" },
+      remoteAddress: "203.0.113.9",
+    });
+    assert.equal(segunda.statusCode, 201, "o cadastro não pode ser recusado por IP");
+    assert.equal(segunda.json().sinalDeIp.contasNoMesmoIp, 1);
+    await app.close();
+  });
+
   it("e-mail repetido é recusado, mesmo com outra caixa", async () => {
     const { app } = montar();
     await cadastrar(app, "Guilherme@Exemplo.com");

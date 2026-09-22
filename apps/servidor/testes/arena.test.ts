@@ -31,6 +31,9 @@ const heroi = (id: string, extra: Partial<Personagem> = {}): Personagem => ({
   mochila: [],
   elo: ELO_INICIAL,
   duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+  dificuldade: "medio",
+  vidasRestantes: 2,
+  vidasGuardadas: 0,
   ...extra,
 });
 

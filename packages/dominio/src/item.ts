@@ -2,11 +2,6 @@ import { type Atributos, ATRIBUTO_DO_RAMO, somar } from "./atributos.ts";
 import type { Ramo } from "./classe.ts";
 import { type Bonus, SEM_BONUS } from "./arvore.ts";
 import { chance, escolher, sortear } from "./aleatorio.ts";
-import {
-  CHANCE_DE_QUEDA_COMUM,
-  CHANCE_DE_QUEDA_JULGAMENTO,
-  SORTEIOS_DO_JULGAMENTO,
-} from "./balanceamento.ts";
 
 /**
  * Equipamento.
@@ -288,28 +283,26 @@ function nomearItem(
  * mesma batalha e chegar na mesma peça, que é o que permite auditar uma
  * reclamação de economia sem acreditar em ninguém.
  *
- * O julgamento sorteia a raridade duas vezes e fica com a melhor. Dobrar
- * o sorteio pesa mais na cauda do que na média — e é a cauda que faz
- * alguém aceitar arriscar o personagem.
+ * `chanceDeCair` e `sorteios` vêm prontos de quem chama — este arquivo não
+ * sabe o que é dificuldade, só sabe sortear. Quem decide os dois números
+ * por dificuldade é `balanceamento.ts` (`CHANCE_DE_QUEDA_POR_DIFICULDADE`,
+ * `SORTEIOS_POR_DIFICULDADE`). Mais de um sorteio pesa mais na cauda do
+ * que na média — e é a cauda que faz alguém aceitar arriscar o personagem.
  */
 export function sortearQueda(dados: {
   nivel: number;
   ramo: Ramo;
   semente: number;
   id: string;
-  mortal: boolean;
+  chanceDeCair: number;
+  sorteios: number;
 }): Item | null {
-  const chanceDeCair = dados.mortal
-    ? CHANCE_DE_QUEDA_JULGAMENTO
-    : CHANCE_DE_QUEDA_COMUM;
-
-  const rolo = chance(dados.semente, chanceDeCair);
+  const rolo = chance(dados.semente, dados.chanceDeCair);
   if (!rolo.acertou) return null;
 
-  const sorteios = dados.mortal ? SORTEIOS_DO_JULGAMENTO : 1;
   let melhor: Item | null = null;
   let semente = rolo.semente;
-  for (let i = 0; i < sorteios; i++) {
+  for (let i = 0; i < dados.sorteios; i++) {
     const item = gerarItem({ ...dados, semente });
     if (!melhor || ordemDaRaridade(item.raridade) > ordemDaRaridade(melhor.raridade)) {
       melhor = item;

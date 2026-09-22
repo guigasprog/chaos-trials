@@ -246,23 +246,24 @@ describe("batalha", () => {
   });
 });
 
-describe("comum contra julgamento", () => {
-  it("perder uma batalha comum é recuar, não morrer", async () => {
+describe("dificuldade — vidas amortecem a derrota", () => {
+  it("com folga (médio, 2 vidas), perder é recuar — a conta desce, não morre", async () => {
     // A regra que a medição obrigou: com ~25% de derrota por luta, derrota
     // significando morte dava uma morte a cada 3 ou 4 batalhas — com revive
-    // pago, isso é extração, não dificuldade.
+    // pago, isso é extração, não dificuldade. É por isso que médio dá folga.
     const fraco: Personagem = {
       id: "fraco", nome: "Fraco", classe: 4, nivel: 1500, xp: 0, camada: 0,
-      estado: "vivo", vida: 5000, visto: AGORA, sucata: 0, mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      estado: "vivo", vida: 5000, visto: AGORA, sucata: 0, mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "medio", vidasRestantes: 2, vidasGuardadas: 0,
     };
     const local = montar([fraco]);
 
     const inicio = await local.inject({
-      method: "POST", url: "/personagens/fraco/batalhas", payload: { tipo: "comum" },
+      method: "POST", url: "/personagens/fraco/batalhas",
     });
-    assert.equal(inicio.json().mortal, false);
+    assert.equal(inicio.json().dificuldade, "medio");
+    assert.equal(inicio.json().vidasRestantes, 2);
 
-    let resultado = null;
+    let resultado = inicio.json().resultado;
     for (let i = 0; i < 300 && !resultado; i++) {
       const r = await local.inject({
         method: "POST",
@@ -275,38 +276,41 @@ describe("comum contra julgamento", () => {
 
     assert.ok(resultado, "a batalha não terminou");
     assert.equal(resultado.venceu, false, "o cenário era de derrota certa");
-    assert.equal(resultado.morreu, false, "derrota comum matou");
+    assert.equal(resultado.morreu, false, "a primeira derrota, com folga, matou");
     assert.equal(resultado.recuou, true);
+    assert.equal(resultado.vidasRestantes, 1);
     assert.equal(resultado.personagem.estado, "vivo");
     await local.close();
   });
 
-  it("o julgamento se anuncia como mortal antes de começar", async () => {
+  it("a resposta já anuncia quantas vidas cobrem a luta, antes de começar", async () => {
     const p = await criar();
     const r = await app.inject({
       method: "POST", url: `/personagens/${p.id}/batalhas`,
-      payload: { tipo: "julgamento" },
     });
     assert.equal(r.statusCode, 201);
-    // A tela precisa poder avisar: esta é a luta em que se morre de verdade.
-    assert.equal(r.json().mortal, true);
-    assert.equal(r.json().tipo, "julgamento");
+    // A tela precisa poder avisar quantas vidas amortecem esta luta.
+    assert.equal(r.json().dificuldade, "medio");
+    assert.equal(r.json().vidasRestantes, 2);
+    assert.ok(r.json().chanceDeFugir > 0 && r.json().chanceDeFugir <= 1);
   });
 
-  it("perder um julgamento leva ao túmulo", async () => {
+  it("na última vida (difícil, 1 vida), sem vida guardada, perder leva ao túmulo", async () => {
     const condenado: Personagem = {
       id: "condenado", nome: "Condenado", classe: 4, nivel: 1500, xp: 0,
       camada: 0, estado: "vivo", vida: 5000, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "dificil", vidasRestantes: 1, vidasGuardadas: 0,
     };
     const local = montar([condenado]);
 
     const inicio = await local.inject({
       method: "POST", url: "/personagens/condenado/batalhas",
-      payload: { tipo: "julgamento" },
     });
 
-    let resultado = null;
+    // Nível 1.500 é tão acima do inimigo calibrado que a abertura sozinha
+    // pode decidir a luta — o próprio POST já vem com `resultado`. Só se
+    // NÃO veio é que há turno para jogar.
+    let resultado = inicio.json().resultado;
     for (let i = 0; i < 300 && !resultado; i++) {
       const r = await local.inject({
         method: "POST",
@@ -319,8 +323,40 @@ describe("comum contra julgamento", () => {
 
     assert.ok(resultado);
     assert.equal(resultado.venceu, false);
-    assert.equal(resultado.morreu, true, "o julgamento devia matar");
+    assert.equal(resultado.morreu, true, "a última vida, sem reserva, devia matar");
+    assert.equal(resultado.vidasRestantes, 0);
     assert.equal(resultado.personagem.estado, "tumulo");
+    await local.close();
+  });
+
+  it("na última vida, COM uma vida guardada, a derrota sobrevive — a guardada some", async () => {
+    const encostado: Personagem = {
+      id: "encostado", nome: "Encostado", classe: 4, nivel: 1500, xp: 0,
+      camada: 0, estado: "vivo", vida: 5000, visto: AGORA, sucata: 0,
+      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "dificil", vidasRestantes: 1, vidasGuardadas: 1,
+    };
+    const local = montar([encostado]);
+
+    const inicio = await local.inject({
+      method: "POST", url: "/personagens/encostado/batalhas",
+    });
+
+    let resultado = inicio.json().resultado;
+    for (let i = 0; i < 300 && !resultado; i++) {
+      const r = await local.inject({
+        method: "POST",
+        url: `/batalhas/${inicio.json().id}/turnos`,
+        payload: { habilidade: "golpe" },
+      });
+      if (r.statusCode !== 200) break;
+      resultado = r.json().resultado;
+    }
+
+    assert.ok(resultado);
+    assert.equal(resultado.morreu, false, "a vida guardada devia ter coberto a queda");
+    assert.equal(resultado.vidaGuardadaUsada, true);
+    assert.equal(resultado.vidasGuardadas, 0);
+    assert.equal(resultado.personagem.estado, "vivo");
     await local.close();
   });
 });
@@ -339,7 +375,7 @@ describe("túmulo e revive", () => {
     sucata: 10_000,
     
     mortes: 1,
-      gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "medio", vidasRestantes: 2, vidasGuardadas: 0,
   });
 
   it("quem está no túmulo não pode lutar", async () => {
@@ -408,7 +444,7 @@ describe("progressão offline", () => {
         sucata: 0,
         
         mortes: 0,
-      gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "medio", vidasRestantes: 2, vidasGuardadas: 0,
       },
     ]);
     relogio = AGORA + 3 * HORA;
@@ -436,7 +472,7 @@ describe("progressão offline", () => {
         sucata: 0,
         
         mortes: 0,
-      gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "medio", vidasRestantes: 2, vidasGuardadas: 0,
       },
     ]);
     relogio = AGORA + 3 * HORA;
@@ -463,7 +499,7 @@ describe("renascimento", () => {
       visto: AGORA,
       sucata: 77,
       
-      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "medio", vidasRestantes: 2, vidasGuardadas: 0,
     };
 
     const cedo = montar([base]);
@@ -608,7 +644,7 @@ describe("árvore de habilidade", () => {
       // `Gume` exige `Vocação` antes; o tronco já comprado é o cenário real.
       id: "vet", nome: "Vet", classe: 4, nivel: 40, xp: 0, camada: 0,
       estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: { raiz: 1 }, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      mortes: 0, gastos: { raiz: 1 }, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "medio", vidasRestantes: 2, vidasGuardadas: 0,
     };
     const local = montar([veterano]);
 
@@ -631,7 +667,7 @@ describe("árvore de habilidade", () => {
     const veterano: Personagem = {
       id: "mago", nome: "Mago", classe: 4, nivel: 40, xp: 0, camada: 0,
       estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: { raiz: 1, gume: 1 }, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      mortes: 0, gastos: { raiz: 1, gume: 1 }, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "medio", vidasRestantes: 2, vidasGuardadas: 0,
     };
     const local = montar([veterano]);
 
@@ -648,7 +684,7 @@ describe("árvore de habilidade", () => {
     const veterano: Personagem = {
       id: "afoito", nome: "Afoito", classe: 4, nivel: 40, xp: 0, camada: 0,
       estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      mortes: 0, gastos: {}, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "medio", vidasRestantes: 2, vidasGuardadas: 0,
     };
     const local = montar([veterano]);
     const r = await local.inject({
@@ -665,7 +701,7 @@ describe("árvore de habilidade", () => {
     const pronto: Personagem = {
       id: "renasce", nome: "Renasce", classe: 4, nivel: naParede, xp: 0,
       camada: 0, estado: "vivo", vida: 500, visto: AGORA, sucata: 0,
-      mortes: 0, gastos: { raiz: 5, gume: 3 }, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 },
+      mortes: 0, gastos: { raiz: 5, gume: 3 }, equipado: {}, mochila: [], elo: 1000, duelos: { vitorias: 0, derrotas: 0, defesas: 0 }, dificuldade: "medio", vidasRestantes: 2, vidasGuardadas: 0,
     };
     const local = montar([pronto]);
     const r = await local.inject({

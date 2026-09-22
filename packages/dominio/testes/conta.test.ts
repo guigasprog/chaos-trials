@@ -4,6 +4,7 @@ import {
   adicionarPersonagem,
   comprarSlot,
   type Conta,
+  contasNoMesmoIp,
   creditarPremium,
   criarConta,
   debitarPremium,
@@ -172,5 +173,35 @@ describe("dado gravado antes", () => {
     assert.deepEqual(c.personagens, []);
     assert.equal(c.visto, AGORA);
     assert.equal(slotsLivres(c), SLOTS_GRATIS);
+  });
+});
+
+describe("sinal de IP", () => {
+  const de = (id: string, ip?: string) =>
+    criarConta({
+      id,
+      email: `${id}@t.com`,
+      senha: "(direto)",
+      agora: AGORA,
+      ...(ip ? { ip } : {}),
+    });
+
+  it("conta o quanto de OUTRAS contas nascem do mesmo IP", () => {
+    const a = de("a", "1.2.3.4");
+    const b = de("b", "1.2.3.4");
+    const c = de("c", "5.6.7.8");
+    assert.equal(contasNoMesmoIp([a, b, c], a), 1);
+    assert.equal(contasNoMesmoIp([a, b, c], c), 0);
+  });
+
+  it("sem IP capturado, o sinal é zero — não dá pra sinalizar o que não se sabe", () => {
+    const sem = de("s");
+    const outra = de("o", "1.2.3.4");
+    assert.equal(contasNoMesmoIp([sem, outra], sem), 0);
+  });
+
+  it("nunca conta a própria conta", () => {
+    const sozinha = de("a", "1.2.3.4");
+    assert.equal(contasNoMesmoIp([sozinha], sozinha), 0);
   });
 });

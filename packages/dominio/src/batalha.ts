@@ -66,6 +66,11 @@ export type Evento =
   | { readonly tipo: "rodada"; readonly numero: number }
   | { readonly tipo: "usou"; readonly quem: string; readonly habilidade: string }
   | { readonly tipo: "impedido"; readonly quem: string; readonly motivo: string }
+  /** Fuga bem-sucedida. Não nasce de `executarTurno` — quem decide se a fuga
+      dá certo é o servidor, ANTES de gastar o turno; ver `batalhas.ts`. Este
+      caso existe aqui só para o herói e o vilão falarem o mesmo vocabulário
+      de evento na tela. */
+  | { readonly tipo: "fugiu"; readonly quem: string }
   | {
       readonly tipo: "dano";
       readonly quem: string;
@@ -457,7 +462,14 @@ function avancarVez(
  * `habilidadeId` ausente faz o combatente escolher sozinho — é o caminho do
  * inimigo e o da progressão offline.
  */
-export function executarTurno(b: Batalha, habilidadeId?: string): Batalha {
+/**
+ * `habilidadeId`: omitido escolhe sozinho entre o que está disponível (o
+ * inimigo, sempre; o herói, num julgamento fora do servidor). `null` é
+ * diferente: um passe DE PROPÓSITO, sem escolher nada — usado quando fugir
+ * falha e o turno é perdido, mas o combate segue (efeitos de início/fim de
+ * turno continuam rodando normalmente).
+ */
+export function executarTurno(b: Batalha, habilidadeId?: string | null): Batalha {
   if (b.vencedor) return b;
 
   const atuante = quemAge(b);
@@ -479,6 +491,12 @@ export function executarTurno(b: Batalha, habilidadeId?: string): Batalha {
       tipo: "impedido",
       quem: atuante.id,
       motivo: "atordoamento",
+    });
+  } else if (!morreuDeEfeito && habilidadeId === null) {
+    passo.eventos.push({
+      tipo: "impedido",
+      quem: atuante.id,
+      motivo: "fugiu",
     });
   } else if (!morreuDeEfeito) {
     const disponiveis = habilidadesDisponiveis(

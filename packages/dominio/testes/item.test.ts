@@ -122,33 +122,33 @@ describe("geração", () => {
 });
 
 describe("queda", () => {
-  const queda = (semente: number, mortal = false) =>
-    sortearQueda({ nivel: 20, ramo: 4, semente, id: `q${semente}`, mortal });
+  const queda = (semente: number, chanceDeCair = 0.34, sorteios = 1) =>
+    sortearQueda({ nivel: 20, ramo: 4, semente, id: `q${semente}`, chanceDeCair, sorteios });
 
-  it("a batalha comum nem sempre larga", () => {
+  it("chance parcial nem sempre larga", () => {
     const caiu = Array.from({ length: 400 }, (_, s) => queda(s)).filter(Boolean);
     assert.ok(caiu.length > 40, `caiu só ${caiu.length} em 400`);
     assert.ok(caiu.length < 360, `caiu ${caiu.length} em 400 — quase sempre`);
   });
 
-  it("o julgamento SEMPRE larga", () => {
-    // É a luta em que se morre de verdade; sair de mãos vazias
+  it("chance 1 SEMPRE larga", () => {
+    // É a luta em que se arrisca a última vida; sair de mãos vazias
     // transformaria o risco em aposta ruim.
     for (let s = 0; s < 100; s++) {
-      assert.ok(queda(s, true), `julgamento ${s} não largou nada`);
+      assert.ok(queda(s, 1), `${s} não largou nada com chance 1`);
     }
   });
 
-  it("o julgamento larga melhor, na cauda", () => {
-    const media = (mortal: boolean) => {
-      const itens = Array.from({ length: 3000 }, (_, s) => queda(s, mortal)).filter(
+  it("dois sorteios larga melhor, na cauda, que um só", () => {
+    const media = (sorteios: number) => {
+      const itens = Array.from({ length: 3000 }, (_, s) => queda(s, 1, sorteios)).filter(
         (i): i is Item => i !== null,
       );
       return (
         itens.reduce((soma, i) => soma + ordemDaRaridade(i.raridade), 0) / itens.length
       );
     };
-    assert.ok(media(true) > media(false));
+    assert.ok(media(2) > media(1));
   });
 });
 

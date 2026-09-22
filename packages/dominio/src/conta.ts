@@ -33,6 +33,16 @@ export interface Conta {
   readonly slotsComprados: number;
   /** Os personagens desta conta, na ordem em que foram criados. */
   readonly personagens: readonly string[];
+  /**
+   * O IP de onde a conta nasceu. Opaco para o domínio, como a senha — quem
+   * resolve o IP de verdade é o servidor.
+   *
+   * É SINAL, não trava. VPN, proxy e NAT compartilhado (wifi de escritório,
+   * provedor com CG-NAT) fazem contas legítimas dividirem IP o tempo todo,
+   * e quem realmente quer abusar troca de rede de graça — um IP sozinho
+   * nunca prova multi-conta. Ver `contasNoMesmoIp`: ele conta, não julga.
+   */
+  readonly ip?: string;
 }
 
 export function criarConta(dados: {
@@ -42,6 +52,7 @@ export function criarConta(dados: {
   agora: number;
   /** Só para testes e para semear conta de demonstração. */
   premium?: number;
+  ip?: string;
 }): Conta {
   const email = normalizarEmail(dados.email);
   if (!emailPlausivel(email)) throw new Error(`e-mail inválido: ${dados.email}`);
@@ -54,7 +65,23 @@ export function criarConta(dados: {
     premium: dados.premium ?? 0,
     slotsComprados: 0,
     personagens: [],
+    ...(dados.ip ? { ip: dados.ip } : {}),
   };
+}
+
+/**
+ * Quantas OUTRAS contas nasceram do mesmo IP que `conta`.
+ *
+ * Pura contagem — decidir o que fazer com o número é de quem chama. Sem
+ * IP (não capturado, ou o cadastro é anterior a este campo existir),
+ * conta zero: não dá pra sinalizar o que não se sabe.
+ */
+export function contasNoMesmoIp(
+  todas: readonly Conta[],
+  conta: Conta,
+): number {
+  if (!conta.ip) return 0;
+  return todas.filter((c) => c.id !== conta.id && c.ip === conta.ip).length;
 }
 
 /**

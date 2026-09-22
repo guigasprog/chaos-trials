@@ -297,6 +297,25 @@ describe("efeitos em combate", () => {
     );
   });
 
+  it("null é um passe de propósito — o turno some, o combate segue", () => {
+    const b0 = montar();
+    const vidaAntes = b0.combatentes.heroi!.vida;
+
+    const b1 = executarTurno(b0, null);
+    assert.equal(b1.combatentes.heroi!.vida, vidaAntes, "passar não gasta a própria vida");
+    assert.ok(
+      b1.eventos.some((e) => e.tipo === "impedido" && e.motivo === "fugiu"),
+      "faltou o evento de passe",
+    );
+    assert.ok(
+      !b1.eventos.some((e) => e.tipo === "usou" && e.quem === "heroi"),
+      "um passe não pode usar habilidade nenhuma",
+    );
+    // O vilão continua agindo normalmente depois de um passe — fugir falho
+    // perde o turno, não pausa a luta.
+    assert.notEqual(b1.vez, b0.vez, "o turno não avançou depois do passe");
+  });
+
   it("cura não passa da vida máxima", () => {
     const curandeiro = criarCombatente({
       id: "heroi",

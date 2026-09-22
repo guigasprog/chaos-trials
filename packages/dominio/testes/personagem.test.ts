@@ -4,10 +4,12 @@ import {
   criarPersonagem,
   custoDoRevive,
   escolherSubclasse,
+  ganharVidaGuardada,
   ganharXp,
   habilidadesDoPersonagem,
   morrer,
   normalizar,
+  perderBatalha,
   type Personagem,
   progredirOffline,
   prontoParaRenascer,
@@ -17,7 +19,12 @@ import {
   subclassesDisponiveis,
   vidaMaximaDe,
 } from "../src/personagem.ts";
-import { OFFLINE_TETO_HORAS, SUCATA_INICIAL } from "../src/balanceamento.ts";
+import {
+  OFFLINE_TETO_HORAS,
+  SUCATA_INICIAL,
+  VIDAS_GUARDADAS_MAXIMO,
+  VIDAS_POR_DIFICULDADE,
+} from "../src/balanceamento.ts";
 import { nivelDaParede, xpParaNivel } from "../src/progressao.ts";
 
 const AGORA = 1_700_000_000_000;
@@ -62,6 +69,118 @@ describe("criação", () => {
 
   it("já começa com alguma habilidade", () => {
     assert.ok(habilidadesDoPersonagem(novo()).length > 0);
+  });
+
+  it("sem escolha explícita, nasce no médio", () => {
+    assert.equal(novo().dificuldade, "medio");
+    assert.equal(novo().vidasRestantes, VIDAS_POR_DIFICULDADE.medio);
+  });
+
+  it("nasce com as vidas da dificuldade escolhida, e zero guardadas", () => {
+    for (const dificuldade of ["facil", "medio", "dificil"] as const) {
+      const p = criarPersonagem({
+        id: "p1",
+        nome: "Teste",
+        classeRaiz: 4,
+        agora: AGORA,
+        dificuldade,
+      });
+      assert.equal(p.dificuldade, dificuldade);
+      assert.equal(p.vidasRestantes, VIDAS_POR_DIFICULDADE[dificuldade]);
+      assert.equal(p.vidasGuardadas, 0);
+    }
+  });
+
+  it("recusa dificuldade que não existe", () => {
+    assert.throws(
+      () =>
+        criarPersonagem({
+          id: "p1",
+          nome: "Teste",
+          classeRaiz: 4,
+          agora: AGORA,
+          // @ts-expect-error só para o teste
+          dificuldade: "impossivel",
+        }),
+      /dificuldade/,
+    );
+  });
+});
+
+describe("perder uma luta", () => {
+  it("com folga, recua e a conta de vidas desce", () => {
+    const p = criarPersonagem({
+      id: "p1", nome: "T", classeRaiz: 4, agora: AGORA, dificuldade: "facil",
+    });
+    const depois = perderBatalha(p);
+    assert.equal(depois.estado, "vivo");
+    assert.equal(depois.vidasRestantes, p.vidasRestantes - 1);
+    assert.ok(depois.vida < p.vida, "recuar não machucou");
+  });
+
+  it("na última vida, sem guardada, morre de vez", () => {
+    const p = criarPersonagem({
+      id: "p1", nome: "T", classeRaiz: 4, agora: AGORA, dificuldade: "dificil",
+    });
+    assert.equal(p.vidasRestantes, 1);
+    const depois = perderBatalha(p);
+    assert.equal(depois.estado, "tumulo");
+    assert.equal(depois.vidasRestantes, 0);
+  });
+
+  it("na última vida, COM guardada, sobrevive e a guardada some", () => {
+    const p = ganharVidaGuardada(
+      criarPersonagem({
+        id: "p1", nome: "T", classeRaiz: 4, agora: AGORA, dificuldade: "dificil",
+      }),
+    );
+    assert.equal(p.vidasGuardadas, 1);
+    const depois = perderBatalha(p);
+    assert.equal(depois.estado, "vivo", "a vida guardada devia ter coberto a queda");
+    assert.equal(depois.vidasRestantes, 1);
+    assert.equal(depois.vidasGuardadas, 0);
+  });
+
+  it("ganharVidaGuardada tem teto", () => {
+    let p = novo();
+    for (let i = 0; i < VIDAS_GUARDADAS_MAXIMO + 5; i++) {
+      p = ganharVidaGuardada(p);
+    }
+    assert.equal(p.vidasGuardadas, VIDAS_GUARDADAS_MAXIMO);
+  });
+
+  it("reviver e renascer devolvem as vidas ao teto da dificuldade", () => {
+    const dificil = criarPersonagem({
+      id: "p1", nome: "T", classeRaiz: 4, agora: AGORA, dificuldade: "dificil",
+    });
+    const morto = { ...morrer(perderBatalha(dificil)) };
+    const { personagem: revivido } = reviver(morto, custoDoRevive());
+    assert.equal(revivido.vidasRestantes, VIDAS_POR_DIFICULDADE.dificil);
+
+    const gasto = perderBatalha(criarPersonagem({
+      id: "p2", nome: "T2", classeRaiz: 4, agora: AGORA, dificuldade: "facil",
+    }));
+    assert.ok(gasto.vidasRestantes < VIDAS_POR_DIFICULDADE.facil);
+    const noNivelDaParede = noNivel(Math.ceil(nivelDaParede(0)), gasto);
+    const renascido = renascer(noNivelDaParede, 1);
+    assert.equal(renascido.vidasRestantes, VIDAS_POR_DIFICULDADE.facil);
+  });
+});
+
+describe("normalizar", () => {
+  it("personagem salvo antes da dificuldade existir ganha médio, vidas cheias", () => {
+    const velho = { ...novo() } as Partial<Personagem> as Personagem;
+    // @ts-expect-error simulando um registro salvo antes deste campo existir
+    delete velho.dificuldade;
+    // @ts-expect-error idem
+    delete velho.vidasRestantes;
+    // @ts-expect-error idem
+    delete velho.vidasGuardadas;
+
+    const normalizado = normalizar(velho);
+    assert.equal(normalizado.dificuldade, "medio");
+    assert.equal(normalizado.vidasRestantes, VIDAS_POR_DIFICULDADE.medio);
+    assert.equal(normalizado.vidasGuardadas, 0);
   });
 });
 
