@@ -32,6 +32,7 @@ import {
   comprarSlot,
   type Conta,
   creditarPremium,
+  sucataNaTaxa,
   contasNoMesmoIp,
   criarConta,
   criarPersonagem,
@@ -115,6 +116,7 @@ import {
   guardarSenha,
 } from "./senhas.ts";
 import { Sessoes, tokenDoCabecalho } from "./sessoes.ts";
+import { Cambio } from "./cambio.ts";
 import {
   chaveDaConta,
   chaveDoAnuncio,
@@ -141,6 +143,8 @@ export interface Opcoes {
   agora?: () => number;
   /** Injetável para o teste inspecionar e reaproveitar sessões. */
   sessoes?: Sessoes;
+  /** Injetável para o teste inspecionar a taxa e o contador do mês. */
+  cambio?: Cambio;
   log?: boolean;
   /**
    * De onde o navegador pode chamar. Vazio libera tudo, que é o certo em
@@ -338,6 +342,7 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
   const agora = opcoes.agora ?? (() => Date.now());
   const batalhas = new Batalhas();
   const sessoes = opcoes.sessoes ?? new Sessoes();
+  const cambio = opcoes.cambio ?? new Cambio(agora());
   /*
    * Serializa o ciclo ler → decidir → gravar por personagem, conta e
    * anúncio.
@@ -1636,6 +1641,127 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
           pagou: vaga.preco,
           moeda: vaga.moeda,
           personagem: paraCliente(comAPeca),
+        };
+      },
+    );
+  });
+
+  // ── Bolsa (câmbio sucata ↔ premium) ───────────────────────────────────
+
+  /** Soma o premium parado em TODAS as contas — o segundo freio da taxa.
+      Ver `taxaDoCambio` em `packages/dominio/src/cambio.ts`. */
+  async function premiumEmCirculacao(): Promise<number> {
+    const todas = await armazenamento.contas.listar();
+    return todas.reduce((soma, c) => soma + c.premium, 0);
+  }
+
+  app.get("/cambio", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const taxa = cambio.taxa(agora(), await premiumEmCirculacao());
+    return {
+      taxa,
+      premiumCompradoNoMes: cambio.premiumCompradoNoMes,
+      historico: cambio.pontosDoHistorico,
+    };
+  });
+
+  app.post("/cambio/comprar", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const corpo = pedido.body as { personagem?: string; premium?: number };
+    if (!corpo?.personagem) {
+      return resposta.status(400).send({ erro: "diga qual personagem paga" });
+    }
+    if (!Number.isInteger(corpo.premium) || (corpo.premium as number) <= 0) {
+      return resposta.status(400).send({ erro: "diga quanto premium comprar" });
+    }
+    const premium = corpo.premium as number;
+
+    return filas.executarEm(
+      [chaveDaConta(conta.id), chaveDoPersonagem(corpo.personagem)],
+      async () => {
+        const atual = normalizarConta(
+          (await armazenamento.contas.buscar(conta.id)) as Conta,
+        );
+        const carregado = await meuPersonagem(atual, corpo.personagem!, resposta);
+        if (!carregado) return;
+        const comprador = carregado.personagem;
+
+        const taxa = cambio.taxa(agora(), await premiumEmCirculacao());
+        const custo = sucataNaTaxa(taxa, premium);
+        if (comprador.sucata < custo) {
+          return resposta
+            .status(400)
+            .send({ erro: `custa ${custo} de sucata e você tem ${comprador.sucata}` });
+        }
+
+        await armazenamento.personagens.salvar({
+          ...comprador,
+          sucata: comprador.sucata - custo,
+        });
+        const contaComPremium = creditarPremium(atual, premium);
+        await armazenamento.contas.salvar(contaComPremium);
+        // Só a compra alimenta o freio de volume — é ela que cria premium
+        // novo na mão de alguém.
+        cambio.registrarCompra(agora(), premium);
+
+        return {
+          pagou: custo,
+          recebeu: premium,
+          taxa,
+          conta: contaParaCliente(contaComPremium),
+        };
+      },
+    );
+  });
+
+  app.post("/cambio/vender", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const corpo = pedido.body as { personagem?: string; premium?: number };
+    if (!corpo?.personagem) {
+      return resposta.status(400).send({ erro: "diga qual personagem recebe" });
+    }
+    if (!Number.isInteger(corpo.premium) || (corpo.premium as number) <= 0) {
+      return resposta.status(400).send({ erro: "diga quanto premium vender" });
+    }
+    const premium = corpo.premium as number;
+
+    return filas.executarEm(
+      [chaveDaConta(conta.id), chaveDoPersonagem(corpo.personagem)],
+      async () => {
+        const atual = normalizarConta(
+          (await armazenamento.contas.buscar(conta.id)) as Conta,
+        );
+        const carregado = await meuPersonagem(atual, corpo.personagem!, resposta);
+        if (!carregado) return;
+        const vendedor = carregado.personagem;
+
+        if (atual.premium < premium) {
+          return resposta
+            .status(400)
+            .send({ erro: `você tem ${atual.premium} de premium, não ${premium}` });
+        }
+
+        const taxa = cambio.taxa(agora(), await premiumEmCirculacao());
+        const recebido = sucataNaTaxa(taxa, premium);
+        const contaSemPremium = debitarPremium(atual, premium);
+        await armazenamento.contas.salvar(contaSemPremium);
+        const vendedorComSucata = {
+          ...vendedor,
+          sucata: vendedor.sucata + recebido,
+        };
+        await armazenamento.personagens.salvar(vendedorComSucata);
+        // Vender NÃO alimenta o freio: premium saindo de circulação não
+        // é o problema que o freio existe para conter.
+
+        return {
+          recebeu: recebido,
+          pagou: premium,
+          taxa,
+          conta: contaParaCliente(contaSemPremium),
+          personagem: paraCliente(vendedorComSucata),
         };
       },
     );

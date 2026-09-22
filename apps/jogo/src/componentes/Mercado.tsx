@@ -60,6 +60,189 @@ function Propriedades({ item }: { item: Item }) {
   );
 }
 
+/**
+ * A linha do preço ao longo do tempo, num SVG simples.
+ *
+ * Sem biblioteca de gráfico — é uma polyline só, normalizada pelo maior
+ * e menor ponto da própria série. Com um ponto só (bolsa nova, sem
+ * histórico ainda), não há o que desenhar: uma linha reta não diz nada,
+ * então a mensagem substitui o gráfico em vez de fingir uma tendência.
+ */
+function GraficoDaBolsa({ pontos }: { pontos: { quando: number; taxa: number }[] }) {
+  if (pontos.length < 2) {
+    return (
+      <p className="painel p-4 text-[0.8rem] text-tinta-fraca">
+        Sem histórico suficiente ainda — volte daqui a algumas horas de uso
+        da bolsa para ver a linha se formar.
+      </p>
+    );
+  }
+
+  const LARGURA = 600;
+  const ALTURA = 120;
+  const valores = pontos.map((p) => p.taxa);
+  const minimo = Math.min(...valores);
+  const maximo = Math.max(...valores);
+  const alcance = Math.max(1, maximo - minimo);
+
+  const coords = pontos.map((p, i) => {
+    const x = (i / (pontos.length - 1)) * LARGURA;
+    const y = ALTURA - ((p.taxa - minimo) / alcance) * ALTURA;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  return (
+    <div className="painel p-4">
+      <svg
+        viewBox={`0 0 ${LARGURA} ${ALTURA}`}
+        className="h-24 w-full"
+        preserveAspectRatio="none"
+      >
+        <polyline
+          points={coords.join(" ")}
+          fill="none"
+          stroke="var(--color-ouro-claro)"
+          strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <div className="mt-1 flex justify-between text-[0.72rem] text-tinta-fraca">
+        <span>{n(minimo)} suc</span>
+        <span>{n(maximo)} suc</span>
+      </div>
+    </div>
+  );
+}
+
+function BolsaTab({
+  taxa,
+  historico,
+  premium,
+  sucata,
+  premiumParaComprar,
+  setPremiumParaComprar,
+  premiumParaVender,
+  setPremiumParaVender,
+  ocupado,
+  aoComprar,
+  aoVender,
+}: {
+  taxa: number;
+  historico: { quando: number; taxa: number }[];
+  /** Da CONTA — é ela que segura o premium. */
+  premium: number;
+  /** Do personagem — é ele que segura a sucata. */
+  sucata: number;
+  premiumParaComprar: string;
+  setPremiumParaComprar: (v: string) => void;
+  premiumParaVender: string;
+  setPremiumParaVender: (v: string) => void;
+  ocupado: boolean;
+  aoComprar: () => void;
+  aoVender: () => void;
+}) {
+  const qtdComprar = Number(premiumParaComprar);
+  const comprarOk = Number.isInteger(qtdComprar) && qtdComprar >= 1;
+  const custoDaCompra = comprarOk ? qtdComprar * taxa : 0;
+  const semSucata = comprarOk && custoDaCompra > sucata;
+
+  const qtdVender = Number(premiumParaVender);
+  const venderOk = Number.isInteger(qtdVender) && qtdVender >= 1;
+  const semPremium = venderOk && qtdVender > premium;
+  const recebidoAoVender = venderOk ? qtdVender * taxa : 0;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="painel flex flex-wrap items-center justify-between gap-4 p-5">
+        <div>
+          <p className="rotulo">Taxa agora</p>
+          <p className="titulo text-3xl">
+            <span className="text-ouro-claro">{n(taxa)}</span>
+            <span className="text-[1rem] text-tinta-fraca"> sucata = 1 premium</span>
+          </p>
+        </div>
+        <p className="max-w-sm text-[0.8rem] leading-relaxed text-tinta-fraca">
+          O preço sobe sozinho com o quanto se compra no mês e com o
+          quanto de premium já está parado nas contas — quanto mais a
+          bolsa é usada, mais cara ela fica para todo mundo.
+        </p>
+      </div>
+
+      <GraficoDaBolsa pontos={historico} />
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div className="painel flex flex-col gap-3 p-5">
+          <p className="titulo text-xl">Comprar premium</p>
+          <p className="text-[0.8rem] text-tinta-fraca">
+            Paga em sucata do personagem, recebe na conta.
+          </p>
+          <label className="flex flex-col gap-2">
+            <span className="rotulo">Quanto premium</span>
+            <input
+              type="number"
+              min={1}
+              value={premiumParaComprar}
+              onChange={(e) => setPremiumParaComprar(e.target.value)}
+              placeholder="inteiro"
+              className="campo"
+            />
+          </label>
+          {comprarOk && (
+            <p className="text-[0.85rem] text-tinta-fraca">
+              Custa{" "}
+              <strong className={semSucata ? "text-sangue" : "text-ouro-claro"}>
+                {n(custoDaCompra)}
+              </strong>{" "}
+              de sucata. Você tem {n(sucata)}.
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={!comprarOk || semSucata || ocupado}
+            onClick={aoComprar}
+            className="botao self-start"
+          >
+            Comprar
+          </button>
+        </div>
+
+        <div className="painel flex flex-col gap-3 p-5">
+          <p className="titulo text-xl">Vender premium</p>
+          <p className="text-[0.8rem] text-tinta-fraca">
+            Paga em premium da conta, recebe sucata no personagem.
+          </p>
+          <label className="flex flex-col gap-2">
+            <span className="rotulo">Quanto premium</span>
+            <input
+              type="number"
+              min={1}
+              value={premiumParaVender}
+              onChange={(e) => setPremiumParaVender(e.target.value)}
+              placeholder="inteiro"
+              className="campo"
+            />
+          </label>
+          {venderOk && (
+            <p className="text-[0.85rem] text-tinta-fraca">
+              Recebe{" "}
+              <strong className="text-ouro-claro">{n(recebidoAoVender)}</strong> de
+              sucata. Você tem {n(premium)} de premium.
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={!venderOk || semPremium || ocupado}
+            onClick={aoVender}
+            className="botao self-start"
+          >
+            Vender
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Mercado({
   p,
   conta,
@@ -73,7 +256,7 @@ export function Mercado({
   aoAtualizarConta: () => void;
   aoFechar: () => void;
 }) {
-  const [aba, setAba] = useState<"vitrine" | "meus" | "loja">("vitrine");
+  const [aba, setAba] = useState<"vitrine" | "meus" | "loja" | "bolsa">("vitrine");
   const [moedaFiltro, setMoedaFiltro] = useState<Moeda | "todas">("todas");
   const [vitrine, setVitrine] = useState<Anuncio[]>([]);
   const [meus, setMeus] = useState<Anuncio[]>([]);
@@ -89,6 +272,15 @@ export function Mercado({
   const [carregandoLoja, setCarregandoLoja] = useState(true);
   // O amuleto não roda: é sempre a mesma vaga, à parte das seis.
   const [amuleto, setAmuleto] = useState<{ preco: number; moeda: Moeda } | null>(null);
+
+  // A bolsa: sucata compra premium, a um preço que sobe sozinho.
+  const [taxa, setTaxa] = useState(0);
+  const [historicoDaBolsa, setHistoricoDaBolsa] = useState<
+    { quando: number; taxa: number }[]
+  >([]);
+  const [carregandoBolsa, setCarregandoBolsa] = useState(true);
+  const [premiumParaComprar, setPremiumParaComprar] = useState("");
+  const [premiumParaVender, setPremiumParaVender] = useState("");
 
   // Rascunho do anúncio: qual peça, por quanto, em qual moeda.
   const [aVender, setAVender] = useState<string | null>(null);
@@ -133,6 +325,24 @@ export function Mercado({
     if (aba === "loja") void carregarLoja();
   }, [aba, carregarLoja]);
 
+  const carregarBolsa = useCallback(async () => {
+    setCarregandoBolsa(true);
+    try {
+      const r = await api.cambio();
+      setTaxa(r.taxa);
+      setHistoricoDaBolsa(r.historico);
+      setErro(null);
+    } catch (e) {
+      setErro(e instanceof ErroDaApi ? e.message : "a bolsa não abriu");
+    } finally {
+      setCarregandoBolsa(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (aba === "bolsa") void carregarBolsa();
+  }, [aba, carregarBolsa]);
+
   async function tentar(acao: () => Promise<unknown>, depois?: string) {
     setOcupado(true);
     setErro(null);
@@ -176,8 +386,8 @@ export function Mercado({
 
       <div className="flex flex-wrap items-center gap-3">
         {/* Por PAPEL, e não por tipo de dado: quem entra já sabe se está
-            comprando, vendendo, ou na prateleira da casa. */}
-        {(["vitrine", "meus", "loja"] as const).map((qual) => (
+            comprando, vendendo, na prateleira da casa, ou trocando moeda. */}
+        {(["vitrine", "meus", "loja", "bolsa"] as const).map((qual) => (
           <button
             key={qual}
             type="button"
@@ -188,7 +398,9 @@ export function Mercado({
               ? "Comprar"
               : qual === "meus"
                 ? `Vender (${meus.filter((a) => a.estado === "aberto").length})`
-                : "Loja"}
+                : qual === "loja"
+                  ? "Loja"
+                  : "Bolsa"}
           </button>
         ))}
 
@@ -445,9 +657,10 @@ export function Mercado({
             )}
           </div>
         </div>
-      ) : carregandoLoja ? (
-        <p className="rotulo">abrindo a prateleira…</p>
-      ) : (
+      ) : aba === "loja" ? (
+        carregandoLoja ? (
+          <p className="rotulo">abrindo a prateleira…</p>
+        ) : (
         <div className="flex flex-col gap-4">
           {amuleto && (
             <div className="painel flex flex-wrap items-center justify-between gap-4 p-5">
@@ -544,6 +757,38 @@ export function Mercado({
             })}
           </ul>
         </div>
+        )
+      ) : carregandoBolsa ? (
+        <p className="rotulo">abrindo a bolsa…</p>
+      ) : (
+        <BolsaTab
+          taxa={taxa}
+          historico={historicoDaBolsa}
+          premium={conta.premium}
+          sucata={p.sucata}
+          premiumParaComprar={premiumParaComprar}
+          setPremiumParaComprar={setPremiumParaComprar}
+          premiumParaVender={premiumParaVender}
+          setPremiumParaVender={setPremiumParaVender}
+          ocupado={ocupado}
+          aoComprar={() =>
+            tentar(async () => {
+              const quantidade = Number(premiumParaComprar);
+              await api.comprarPremium(p.id, quantidade);
+              await carregarBolsa();
+              setPremiumParaComprar("");
+            }, `Comprou ${premiumParaComprar} de premium.`)
+          }
+          aoVender={() =>
+            tentar(async () => {
+              const quantidade = Number(premiumParaVender);
+              const r = await api.venderPremium(p.id, quantidade);
+              aoAtualizar(r.personagem);
+              await carregarBolsa();
+              setPremiumParaVender("");
+            }, `Vendeu ${premiumParaVender} de premium.`)
+          }
+        />
       )}
 
       <p className="text-[0.8rem] leading-relaxed text-tinta-fraca">

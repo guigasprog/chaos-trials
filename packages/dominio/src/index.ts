@@ -27,6 +27,7 @@ export * from "./item.ts";
 export * from "./arena.ts";
 export * from "./conta.ts";
 export * from "./loja.ts";
+export * from "./cambio.ts";
 export {
   type Anuncio,
   type EstadoDoAnuncio,
@@ -53,4 +54,7 @@ export {
   POCAO_EM_VITORIAS,
   PRECO_MAXIMO,
   PRECO_MINIMO,
+  TAXA_BASE_DO_CAMBIO,
+  CAMBIO_ESCALA_DE_VOLUME,
+  CAMBIO_ESCALA_DE_CIRCULACAO,
 } from "./balanceamento.ts";

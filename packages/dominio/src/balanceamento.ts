@@ -519,3 +519,37 @@ export const SLOTS_MAXIMO = 10;
  * restart do servidor.
  */
 export const LOJA_TROCA_A_CADA_MS = 60 * 60 * 1000;
+
+// ── Bolsa (câmbio sucata ↔ premium) ─────────────────────────────────────
+
+/**
+ * O preço de tabela: quanta sucata compra 1 de premium quando a bolsa
+ * nunca foi usada este mês e não há premium nenhum em circulação.
+ *
+ * 2.000, como pedido. Alto o bastante para não ser um atalho óbvio —
+ * `SUCATA_INICIAL` é 15, e uma vitória rende poucas unidades — mas
+ * existente, que é o ponto: sem ele não há caminho nenhum de sucata
+ * para premium, e com preço fixo em vez de flutuante o caminho vira
+ * ilimitado, o que `cambio.ts` explica por que não pode ser.
+ */
+export const TAXA_BASE_DO_CAMBIO = 2000;
+
+/**
+ * Quanto premium comprado NO MÊS precisa passar para o preço dobrar.
+ *
+ * É o freio principal: uso em massa encarece a bolsa para todo mundo,
+ * inclusive para quem começou a usar primeiro. Chute inicial — pedir
+ * para medir e corrigir é o que `balanceamento.ts` promete no topo do
+ * arquivo, e este número não tem medição de verdade ainda.
+ */
+export const CAMBIO_ESCALA_DE_VOLUME = 20_000;
+
+/**
+ * Quanto premium precisa estar parado nas contas (soma de todo mundo)
+ * para o preço dobrar por causa disso.
+ *
+ * Segundo freio, independente do primeiro: mesmo numa bolsa pouco usada
+ * num mês específico, uma economia já rica em premium acumulado torna
+ * imprimir mais premium mais caro. Também chute inicial.
+ */
+export const CAMBIO_ESCALA_DE_CIRCULACAO = 50_000;

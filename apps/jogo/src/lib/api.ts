@@ -435,6 +435,28 @@ export const api = {
       corpo: { personagem },
     }),
 
+  cambio: () =>
+    pedir<{
+      taxa: number;
+      premiumCompradoNoMes: number;
+      historico: { quando: number; taxa: number }[];
+    }>("/cambio"),
+
+  comprarPremium: (personagem: string, premium: number) =>
+    pedir<{ pagou: number; recebeu: number; taxa: number; conta: Conta }>(
+      "/cambio/comprar",
+      { metodo: "POST", corpo: { personagem, premium } },
+    ),
+
+  venderPremium: (personagem: string, premium: number) =>
+    pedir<{
+      recebeu: number;
+      pagou: number;
+      taxa: number;
+      conta: Conta;
+      personagem: Personagem;
+    }>("/cambio/vender", { metodo: "POST", corpo: { personagem, premium } }),
+
   evoluirArvore: (id: string, no: string) =>
     pedir<Personagem>(`/personagens/${id}/arvore`, {
       metodo: "POST",
