@@ -553,3 +553,43 @@ export const CAMBIO_ESCALA_DE_VOLUME = 20_000;
  * imprimir mais premium mais caro. Também chute inicial.
  */
 export const CAMBIO_ESCALA_DE_CIRCULACAO = 50_000;
+
+// ── Combate em tempo real (Fase 1) ──────────────────────────────────────
+
+/*
+ * Nenhum destes números tem medição de verdade ainda — são o chute
+ * inicial que a spec (docs/superpowers/specs/2026-09-22-...) já marca
+ * como EM ABERTO. Jogar de verdade e ajustar depois, como o resto deste
+ * arquivo pede.
+ */
+
+/** Quantos ticks o servidor roda por segundo, nesta sala. */
+export const TICKS_POR_SEGUNDO = 10;
+
+/** Quantos ticks sem intenção do cliente encerram a sala como derrota. */
+export const TIMEOUT_DE_DESCONEXAO_MS = 15_000;
+
+/** Quantos ticks de invencibilidade uma esquiva dá. */
+export const DURACAO_DA_ESQUIVA_EM_TICKS = 4;
+
+/** Quantos ticks até poder esquivar de novo, depois de esquivar. */
+export const RECARGA_DA_ESQUIVA_EM_TICKS = 20;
+
+/** Quantos ticks de aviso o golpe do inimigo dá antes de resolver. */
+export const TELEGRAFO_DO_INIMIGO_EM_TICKS = 8;
+
+/** Quantas ondas de inimigo comum vêm antes da onda de chefe. */
+export const ONDAS_COMUNS_ANTES_DO_CHEFE = 3;
+
+/**
+ * Fração do poder ofensivo do jogador que o inimigo comum desta sala usa
+ * como atributo — pensado pra ser vencível sozinho, sem grupo. O chefe é
+ * mais forte que o próprio jogador: é a parte "mega difícil" do pedido.
+ */
+export const DUREZA_DO_INIMIGO_COMUM_NA_SALA = 0.6;
+export const DUREZA_DO_CHEFE_NA_SALA = 1.3;
+
+/** Múltiplo de vida do inimigo comum e do chefe, em relação à vida
+    máxima do jogador — chefe aguenta mais troca, não só bate mais forte. */
+export const VIDA_DO_INIMIGO_COMUM_NA_SALA = 0.8;
+export const VIDA_DO_CHEFE_NA_SALA = 2.5;
