@@ -83,6 +83,7 @@ function inimigoDaOnda(dados: {
   const dureza = ehChefe ? DUREZA_DO_CHEFE_NA_SALA : DUREZA_DO_INIMIGO_COMUM_NA_SALA;
   const vida = ehChefe ? VIDA_DO_CHEFE_NA_SALA : VIDA_DO_INIMIGO_COMUM_NA_SALA;
 
+  // O multiplicador `3` é chute inicial — sem medição real ainda (EM ABERTO, ver spec).
   return {
     tipo: ehChefe ? "chefe" : "comum",
     vida: Math.round(poderOfensivo * 3 * vida),

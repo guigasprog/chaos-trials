@@ -566,7 +566,7 @@ export const CAMBIO_ESCALA_DE_CIRCULACAO = 50_000;
 /** Quantos ticks o servidor roda por segundo, nesta sala. */
 export const TICKS_POR_SEGUNDO = 10;
 
-/** Quantos ticks sem intenção do cliente encerram a sala como derrota. */
+/** Quantos milissegundos sem intenção do cliente encerram a sala como derrota (15s — ver spec, seção 6). */
 export const TIMEOUT_DE_DESCONEXAO_MS = 15_000;
 
 /** Quantos ticks de invencibilidade uma esquiva dá. */
@@ -589,7 +589,8 @@ export const ONDAS_COMUNS_ANTES_DO_CHEFE = 3;
 export const DUREZA_DO_INIMIGO_COMUM_NA_SALA = 0.6;
 export const DUREZA_DO_CHEFE_NA_SALA = 1.3;
 
-/** Múltiplo de vida do inimigo comum e do chefe, em relação à vida
-    máxima do jogador — chefe aguenta mais troca, não só bate mais forte. */
+/** Multiplicador de vida do inimigo comum e do chefe, escalonado do poder
+    ofensivo do jogador (não da sua vida máxima) — chefe aguenta mais troca,
+    não só bate mais forte. Veja `inimigoDaOnda` em combate-tempo-real.ts. */
 export const VIDA_DO_INIMIGO_COMUM_NA_SALA = 0.8;
 export const VIDA_DO_CHEFE_NA_SALA = 2.5;
