@@ -131,3 +131,33 @@ export function iniciarSala(dados: {
     nivelDoJogador: dados.nivelDoJogador,
   };
 }
+
+function indiceLimitado(lista: readonly unknown[], indice: number, delta: number): number {
+  return Math.max(0, Math.min(lista.length - 1, indice + delta));
+}
+
+export function moverRaia(sala: Sala, direcao: -1 | 1): Sala {
+  const atual = RAIAS.indexOf(sala.jogador.raia);
+  const novaRaia = RAIAS[indiceLimitado(RAIAS, atual, direcao)]!;
+  return { ...sala, jogador: { ...sala.jogador, raia: novaRaia } };
+}
+
+export function moverDistancia(sala: Sala, direcao: -1 | 1): Sala {
+  const atual = DISTANCIAS.indexOf(sala.jogador.distancia);
+  const novaDistancia = DISTANCIAS[indiceLimitado(DISTANCIAS, atual, direcao)]!;
+  return { ...sala, jogador: { ...sala.jogador, distancia: novaDistancia } };
+}
+
+/** Sem efeito se a recarga ainda não zerou — pedir esquiva cedo demais
+    simplesmente não faz nada, não é erro. */
+export function iniciarEsquiva(sala: Sala): Sala {
+  if (sala.jogador.recargaDeEsquivaPor > 0) return sala;
+  return {
+    ...sala,
+    jogador: {
+      ...sala.jogador,
+      esquivandoPor: DURACAO_DA_ESQUIVA_EM_TICKS,
+      recargaDeEsquivaPor: RECARGA_DA_ESQUIVA_EM_TICKS,
+    },
+  };
+}
