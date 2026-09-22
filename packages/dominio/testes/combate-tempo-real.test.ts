@@ -312,8 +312,24 @@ describe("avancarTick", () => {
     assert.ok(depois.jogador.vida < telegrafando.jogador.vida, "o golpe devia ter resolvido e acertado");
   });
 
+  it("telégrafo com mais de um tick restante apenas decrementa — não resolve o golpe ainda", () => {
+    const base = salaComInimigoNaMesmaPosicao();
+    const telegrafando = {
+      ...base,
+      jogador: { ...base.jogador, raia: base.inimigo.raia, distancia: base.inimigo.distancia },
+      inimigo: { ...base.inimigo, telegrafandoPor: 3 },
+    };
+    const depois = avancarTick(telegrafando);
+    assert.equal(depois.inimigo.telegrafandoPor, 2);
+    assert.equal(depois.jogador.vida, telegrafando.jogador.vida, "golpe não deve ter resolvido com tempo restante");
+  });
+
   it("inimigo comum derrotado avança pra próxima onda, jogador mantém a vida que tinha", () => {
-    const sala = { ...novaSala(), inimigo: { ...novaSala().inimigo, vida: 0 } };
+    const sala = {
+      ...novaSala(),
+      jogador: { ...novaSala().jogador, vida: 120 }, // já ferido — cura seria detectável
+      inimigo: { ...novaSala().inimigo, vida: 0 },
+    };
     const depois = avancarTick(sala);
     assert.equal(depois.onda, 2);
     assert.equal(depois.fase, "em-andamento");
@@ -334,6 +350,30 @@ describe("avancarTick", () => {
 
   it("jogador com vida zero termina a sala em derrota, mesmo com o inimigo vivo", () => {
     const sala = { ...novaSala(), jogador: { ...novaSala().jogador, vida: 0 } };
+    const depois = avancarTick(sala);
+    assert.equal(depois.fase, "derrota");
+  });
+
+  it("jogador e inimigo comum zerados no mesmo tick: derrota vence, sem avançar onda", () => {
+    // Isola a ordem exigida pela spec: um jogador que morre não pode
+    // "vencer" no mesmo tick em que seu algoz também zera — o passo 2 do
+    // avancarTick precisa cortar o fluxo antes do passo 5 (avanço de onda).
+    const sala = {
+      ...novaSala(),
+      jogador: { ...novaSala().jogador, vida: 0 },
+      inimigo: { ...novaSala().inimigo, vida: 0 },
+    };
+    const depois = avancarTick(sala);
+    assert.equal(depois.fase, "derrota");
+    assert.equal(depois.onda, sala.onda, "onda não deve avançar quando o jogador já morreu");
+  });
+
+  it("jogador e chefe zerados no mesmo tick: derrota vence, não vitória", () => {
+    const sala = {
+      ...novaSala(),
+      jogador: { ...novaSala().jogador, vida: 0 },
+      inimigo: { ...novaSala().inimigo, tipo: "chefe" as const, vida: 0 },
+    };
     const depois = avancarTick(sala);
     assert.equal(depois.fase, "derrota");
   });
