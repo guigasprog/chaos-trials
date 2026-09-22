@@ -19,6 +19,7 @@ export function Ficha({
   aoAtualizar,
   aoAtualizarConta,
   aoLutar,
+  aoVoltarAPrateleira,
   ocupado,
 }: {
   p: Personagem;
@@ -27,6 +28,10 @@ export function Ficha({
   /** O revive cobra da conta; a barra do herói precisa saber. */
   aoAtualizarConta: () => void;
   aoLutar: (tipo: "comum" | "julgamento") => void;
+  /** A saída do túmulo pra quem não vai (ou não pode) reviver agora — sem
+      isso a única saída era descobrir sozinho que o retrato no HUD troca
+      de personagem. */
+  aoVoltarAPrateleira: () => void;
   ocupado: boolean;
 }) {
   const [erro, setErro] = useState<string | null>(null);
@@ -183,10 +188,19 @@ export function Ficha({
               ? `faltam ${n(p.custoDoRevive - conta.premium)} de premium`
               : `Reviver por ${n(p.custoDoRevive)}`}
           </button>
-          <p className="text-[0.8rem] text-tinta-fraca">
-            Ou apague o personagem na prateleira e comece outro — a vaga
-            volta, as camadas não.
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={aoVoltarAPrateleira}
+              className="botao"
+            >
+              Voltar à prateleira
+            </button>
+            <p className="text-[0.8rem] text-tinta-fraca">
+              Lá dá para apagar este personagem e começar outro — a vaga
+              volta, as camadas não.
+            </p>
+          </div>
         </div>
       ) : (
         <>

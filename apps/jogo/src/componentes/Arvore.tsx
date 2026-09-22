@@ -120,6 +120,11 @@ export function Arvore({
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [comprando, setComprando] = useState<string | null>(null);
+  /** O nó tocado/clicado por último — abre o detalhe, não compra na hora.
+      Antes um clique só já gastava o ponto, e a única explicação do nó era
+      o `title` do navegador: invisível no toque, e em desktop só depois de
+      segurar o mouse parado. */
+  const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const paleta = PALETAS[p.classe.ramo];
 
   async function comprar(no: NoDaArvore) {
@@ -127,6 +132,7 @@ export function Arvore({
     setErro(null);
     try {
       aoAtualizar(await api.evoluirArvore(p.id, no.id));
+      setSelecionadoId(null);
     } catch (e) {
       setErro(e instanceof ErroDaApi ? e.message : "não deu para comprar");
     } finally {
@@ -138,6 +144,7 @@ export function Arvore({
   const linhas = Math.max(...p.arvore.nos.map((n) => n.linha)) + 1;
   const bonus = p.arvore.bonus as unknown as BonusVisivel;
   const ativos = NOME_DO_BONUS.filter(([chave]) => (bonus[chave] ?? 0) > 0);
+  const selecionado = p.arvore.nos.find((n) => n.id === selecionadoId) ?? null;
 
   return (
     <section className="surge flex flex-col gap-6">
@@ -172,6 +179,52 @@ export function Arvore({
 
       {erro && <p className="painel p-4 text-[0.88rem] text-sangue">{erro}</p>}
 
+      {selecionado && (
+        <div className="painel surge flex flex-col gap-3 p-5" style={{ borderColor: paleta.brilho }}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="rotulo">{MARCA[selecionado.tipo]?.rotulo}</p>
+              <p className="titulo text-2xl">{selecionado.nome}</p>
+            </div>
+            <span className="text-[0.82rem] text-tinta-fraca">
+              {selecionado.comprados} / {selecionado.graus} graus
+            </span>
+          </div>
+
+          <p className="text-[0.9rem] leading-relaxed text-tinta-fraca">
+            {selecionado.descricao}
+          </p>
+
+          {selecionado.impedimento ? (
+            <p className="text-[0.85rem] text-sangue">
+              {selecionado.impedimento.detalhe}
+            </p>
+          ) : (
+            <p className="text-[0.85rem] text-tinta-fraca">
+              Custa {selecionado.custo} ponto{selecionado.custo > 1 ? "s" : ""}.
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              disabled={!selecionado.podeComprar || comprando !== null}
+              onClick={() => comprar(selecionado)}
+              className="botao botao-grande"
+            >
+              {comprando === selecionado.id ? "comprando…" : "Confirmar compra"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelecionadoId(null)}
+              className="botao"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         className="relative"
         style={{ "--colunas": colunas, "--linhas": linhas } as React.CSSProperties}
@@ -191,26 +244,24 @@ export function Arvore({
         {p.arvore.nos.map((no) => {
           const cheio = no.comprados >= no.graus;
           const comecado = no.comprados > 0;
-          const clicavel = no.podeComprar && comprando === null;
 
           return (
             <button
               key={no.id}
               type="button"
-              disabled={!clicavel}
-              onClick={() => comprar(no)}
-              title={
-                no.impedimento
-                  ? `${no.descricao} — ${no.impedimento.detalhe}`
-                  : `${no.descricao} — custa ${no.custo}`
-              }
+              onClick={() => setSelecionadoId(no.id === selecionadoId ? null : no.id)}
+              title={no.descricao}
               /* `no-pode` é o convite: com ponto no bolso e requisito
                  cumprido, o nó sai do cinza sozinho. Sem isso, oito pontos
                  para gastar ficavam diante de uma grade inteira apagada, e
-                 nada dizia por onde começar. */
+                 nada dizia por onde começar. Todo nó é clicável agora — o
+                 clique só abre o detalhe acima; quem decide comprar é o
+                 botão "Confirmar compra" de lá. */
               className={`no-arvore no-${no.tipo} ${
                 no.podeComprar ? "no-pode" : ""
-              } ${comecado ? "no-aceso" : ""} ${cheio ? "no-cheio" : ""}`}
+              } ${comecado ? "no-aceso" : ""} ${cheio ? "no-cheio" : ""} ${
+                no.id === selecionadoId ? "no-selecionado" : ""
+              }`}
               style={{ gridColumn: no.coluna + 1, gridRow: no.linha + 1 }}
             >
               <span className="no-sigla">{MARCA[no.tipo]?.sigla}</span>

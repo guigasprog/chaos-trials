@@ -341,6 +341,11 @@ export default function Jogo() {
               aoAtualizar={setP}
               aoAtualizarConta={() => void recarregar()}
               aoLutar={lutar}
+              aoVoltarAPrateleira={() => {
+                esquecerId();
+                setP(null);
+                setLugar("slots");
+              }}
               ocupado={ocupado}
             />
           </>

@@ -353,6 +353,13 @@ body {
   box-shadow: 0 4px 0 rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(217, 164, 65, 0.25);
 }
 
+/* O nó com o painel de detalhe aberto — sem isso, em uma grade de vinte
+   nós apagados não dá pra saber qual deles o texto acima está descrevendo. */
+.no-selecionado {
+  filter: none;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.6), 0 0 0 2px var(--acento);
+}
+
 /* A marca do tipo: a cor diz o que o ponto vai fazer antes de ler o nome. */
 .no-sigla {
   font-size: 0.56rem;
