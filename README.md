@@ -10,7 +10,7 @@ Precisa de Node 20.11 ou mais novo.
 ```bash
 npm install
 
-npm run teste      # 141 testes: domínio e API
+npm run teste      # 356 testes: domínio e API
 npm run tipos      # conferência de tipos
 npm run simular    # relatório de balanceamento
 npm run servidor   # a API, em http://localhost:3333
@@ -19,13 +19,16 @@ npm run jogo       # a tela, em http://localhost:3000
 
 Com os dois no ar, abra **http://localhost:3000** e jogue.
 
-O **jogo roda, com tela**: escolher uma das cinco raízes, criar personagem,
-lutar turno a turno clicando nas habilidades, subir de nível, escolher
-subclasse, enfrentar julgamentos, morrer e ser revivido.
-
-Ainda **não há conta**: autenticação é o sub-projeto 6. Hoje o id do
-personagem fica no navegador e serve de credencial, o que basta para jogar
-localmente e não para expor.
+O **jogo roda, com tela**: cadastro e login por conta, escolher uma das
+cinco raízes, criar personagem (até o limite de slots da conta), lutar
+turno a turno clicando nas habilidades, subir de nível, escolher subclasse,
+enfrentar julgamentos, morrer e ser revivido. A vida atravessa as
+batalhas — cura por poção (paga em sucata), descanso em tempo real ou de
+graça ao subir de nível. Itens caem do combate, vão para a mochila, se
+vestem ou se desmancham por sucata. O mercado deixa vender para outros
+jogadores (dízimo de 8%, economia fechada) e comprar o que largaram. A
+arena é PvP assíncrono contra a ficha salva de outro jogador, pareado por
+faixa de nível — ganha ou perde elo, nunca morre nem perde item lá.
 
 A arte das classes é gerada por procedimento, em SVG: cada uma é uma **figura
 em janela de catedral** — ogiva, halo, manto em dobras e o instrumento na mão
@@ -44,18 +47,28 @@ atualizar, sem código para mexer: o que manda é o arquivo existir, e sem ele
 vale o gerado. Detalhes de formato e de origem em
 `apps/jogo/public/classes/LEIA-ME.md`.
 
-Também dá para jogar sem tela nenhuma, por HTTP:
+Também dá para jogar sem tela nenhuma, por HTTP. Toda rota de personagem
+exige conta — o token do cadastro vira `Authorization: Bearer`:
 
 ```bash
 npm run servidor &
 
-curl -s -X POST localhost:3333/personagens   -H 'Content-Type: application/json'   -d '{"nome":"Guigas","classe":4}'
+curl -s -X POST localhost:3333/contas -H 'Content-Type: application/json' \
+  -d '{"email":"guigas@exemplo.com","senha":"uma senha bem comprida"}'
+# devolve { token, conta } — cadastro já loga, sem precisar de /sessoes depois
+
+TOKEN=SEU_TOKEN
+
+curl -s -X POST localhost:3333/personagens -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"nome":"Guigas","classe":4}'
 # devolve o personagem, com o id
 
-curl -s -X POST localhost:3333/personagens/SEU_ID/batalhas   -H 'Content-Type: application/json' -d '{"tipo":"comum"}'
+curl -s -X POST localhost:3333/personagens/SEU_ID/batalhas -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"tipo":"comum"}'
 # devolve a batalha, com o id e as habilidades disponíveis
 
-curl -s -X POST localhost:3333/batalhas/BATALHA_ID/turnos   -H 'Content-Type: application/json' -d '{"habilidade":"golpe"}'
+curl -s -X POST localhost:3333/batalhas/BATALHA_ID/turnos -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"habilidade":"golpe"}'
 # repita até `resultado` vir preenchido
 ```
 
