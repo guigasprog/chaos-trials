@@ -22,3 +22,4 @@ coverage/
 # Dados de personagem gravados ao rodar o servidor local. São de quem jogou
 # na máquina, não do projeto — e entraram uma vez sem querer.
 apps/*/dados/
+.worktrees/
