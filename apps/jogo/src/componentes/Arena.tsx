@@ -144,7 +144,8 @@ export function Arena({
         <strong className="text-tinta">Ele não perde nada</strong> — nem
         sucata, nem item, nem nível; só elo, que é reputação. Você paga com
         vida e <strong className="text-tinta">não morre na arena</strong>:
-        permadeath é do julgamento, onde você escolheu apostar.
+        permadeath é só de perder a última vida numa luta de verdade, onde
+        você escolheu a dificuldade.
       </p>
 
       {erro && <p className="painel p-4 text-[0.88rem] text-sangue">{erro}</p>}

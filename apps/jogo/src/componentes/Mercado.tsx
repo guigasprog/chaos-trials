@@ -87,6 +87,8 @@ export function Mercado({
   const [vagasDaLoja, setVagasDaLoja] = useState<VagaDaLoja[]>([]);
   const [trocaDaLojaEm, setTrocaDaLojaEm] = useState(0);
   const [carregandoLoja, setCarregandoLoja] = useState(true);
+  // O amuleto não roda: é sempre a mesma vaga, à parte das seis.
+  const [amuleto, setAmuleto] = useState<{ preco: number; moeda: Moeda } | null>(null);
 
   // Rascunho do anúncio: qual peça, por quanto, em qual moeda.
   const [aVender, setAVender] = useState<string | null>(null);
@@ -118,6 +120,7 @@ export function Mercado({
       const r = await api.loja();
       setVagasDaLoja(r.vagas);
       setTrocaDaLojaEm(r.proximaTrocaEm);
+      setAmuleto(r.amuleto);
       setErro(null);
     } catch (e) {
       setErro(e instanceof ErroDaApi ? e.message : "a loja não abriu");
@@ -446,6 +449,52 @@ export function Mercado({
         <p className="rotulo">abrindo a prateleira…</p>
       ) : (
         <div className="flex flex-col gap-4">
+          {amuleto && (
+            <div className="painel flex flex-wrap items-center justify-between gap-4 p-5">
+              <div>
+                <p className="rotulo">Amuleto de vida extra</p>
+                <p className="titulo text-xl">
+                  {p.vidasGuardadas} / {p.vidasGuardadasMaximo} guardadas
+                </p>
+                <p className="mt-1 text-[0.8rem] leading-relaxed text-tinta-fraca">
+                  Cobre a próxima derrota que mataria de vez. Não roda — está
+                  sempre à venda, e não ocupa a mochila.
+                </p>
+              </div>
+              <div className="flex flex-none flex-col items-end gap-2">
+                <Moedinha valor={amuleto.preco} moeda={amuleto.moeda} />
+                <button
+                  type="button"
+                  disabled={
+                    ocupado ||
+                    p.vidasGuardadas >= p.vidasGuardadasMaximo ||
+                    saldoDe(amuleto.moeda) < amuleto.preco
+                  }
+                  onClick={() =>
+                    tentar(async () => {
+                      const r = await api.comprarAmuleto(p.id);
+                      aoAtualizar(r.personagem);
+                    }, "Vida extra guardada.")
+                  }
+                  className="botao"
+                  title={
+                    p.vidasGuardadas >= p.vidasGuardadasMaximo
+                      ? "já está no teto"
+                      : saldoDe(amuleto.moeda) < amuleto.preco
+                        ? `você tem ${n(saldoDe(amuleto.moeda))}`
+                        : "Comprar"
+                  }
+                >
+                  {p.vidasGuardadas >= p.vidasGuardadasMaximo
+                    ? "no teto"
+                    : saldoDe(amuleto.moeda) < amuleto.preco
+                      ? "sem saldo"
+                      : `Comprar por ${n(amuleto.preco)}`}
+                </button>
+              </div>
+            </div>
+          )}
+
           <p className="text-[0.82rem] text-tinta-fraca">
             Seis vagas, de um vendedor que não é ninguém. Trocam em{" "}
             <strong className="text-ouro-claro">

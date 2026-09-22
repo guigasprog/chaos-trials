@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Chaos Trials",
   description:
-    "RPG por turnos com progressão infinita por prestígio. Perder um julgamento é permanente.",
+    "RPG por turnos com progressão infinita por prestígio. Perder a última vida é permanente.",
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {

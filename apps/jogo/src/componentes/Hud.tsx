@@ -104,6 +104,24 @@ export function Hud({
         <small>nv</small>
       </span>
 
+      {!noTumulo && (
+        <span
+          className="hud-moeda"
+          title={`${p.vidasRestantes} vida${p.vidasRestantes === 1 ? "" : "s"} de reserva${
+            p.vidasGuardadas > 0
+              ? ` · ${p.vidasGuardadas} guardada${p.vidasGuardadas === 1 ? "" : "s"}`
+              : ""
+          } — dificuldade ${p.dificuldade}`}
+        >
+          <strong>{"♥".repeat(Math.max(1, p.vidasRestantes))}</strong>
+          {p.vidasGuardadas > 0 && (
+            <span className="rotulo" style={{ color: "var(--color-ouro)" }}>
+              +{p.vidasGuardadas}
+            </span>
+          )}
+        </span>
+      )}
+
       <span className="hud-moeda" title="Sucata — ganha jogando">
         <strong>{n(p.sucata)}</strong>
         <span className="rotulo">suc</span>

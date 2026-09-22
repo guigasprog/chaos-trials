@@ -56,7 +56,11 @@ function narrar(evento: Evento, nomes: Record<string, string>): string | null {
     case "limpou":
       return `${quem(evento.alvo)} se purga`;
     case "impedido":
-      return `${quem(evento.quem)} não consegue agir`;
+      return evento.motivo === "fugiu"
+        ? `${quem(evento.quem)} tenta fugir e não consegue — perde o turno`
+        : `${quem(evento.quem)} não consegue agir`;
+    case "fugiu":
+      return `${quem(evento.quem)} foge da luta`;
     case "morreu":
       return `${quem(evento.quem)} cai`;
     default:
@@ -275,6 +279,10 @@ export function Combate({
   const [golpes, setGolpes] = useState<Golpe[]>([]);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Sobe conforme o vilão perde vida — fugir de algo quase morto é mais
+  // fácil. O servidor manda o número certo a cada turno; isto só guarda o
+  // último que chegou.
+  const [chanceDeFugir, setChanceDeFugir] = useState(batalha.chanceDeFugir);
   const fim = useRef<HTMLDivElement>(null);
 
   const nomes = Object.fromEntries(
@@ -338,10 +346,32 @@ export function Combate({
     try {
       const r = await api.agir(batalha.id, habilidade);
       setEstado(r.estado);
+      if (r.chanceDeFugir !== undefined) setChanceDeFugir(r.chanceDeFugir);
       registrar(r.eventos);
       if (r.resultado) aoTerminar(r.resultado);
     } catch (e) {
       setErro(e instanceof ErroDaApi ? e.message : "o turno não passou");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /**
+   * Sucesso encerra a luta ali — sem prêmio, sem vida perdida. Falha perde
+   * o turno: o log mostra "perdeu a chance de fugir" e o vilão age na
+   * sequência, exatamente como perder o turno a qualquer outro golpe.
+   */
+  async function fugir() {
+    setOcupado(true);
+    setErro(null);
+    try {
+      const r = await api.fugir(batalha.id);
+      setEstado(r.estado);
+      if (r.chanceDeFugir !== undefined) setChanceDeFugir(r.chanceDeFugir);
+      registrar(r.eventos);
+      if (r.resultado) aoTerminar(r.resultado);
+    } catch (e) {
+      setErro(e instanceof ErroDaApi ? e.message : "a fuga não deu");
     } finally {
       setOcupado(false);
     }
@@ -352,9 +382,9 @@ export function Combate({
 
   return (
     <section className="surge flex flex-col gap-8">
-      {batalha.mortal && (
+      {batalha.vidasRestantes <= 1 && batalha.vidasGuardadas === 0 && (
         <p className="painel border-sangue/60 px-5 py-3 text-center text-[0.85rem] text-sangue">
-          Julgamento. Perder aqui é permanente.
+          Última vida, sem reserva. Perder aqui é permanente.
         </p>
       )}
 
@@ -435,6 +465,18 @@ export function Combate({
               );
             })}
           </ul>
+
+          {/* Fugir é sempre uma opção, ao lado das habilidades — não
+              dentro delas: fugir não é um golpe, é desistir da luta. */}
+          <button
+            type="button"
+            onClick={fugir}
+            disabled={ocupado}
+            className="botao mt-3"
+            title="Sucesso encerra a luta sem prêmio nem perda de vida. Falha perde o turno."
+          >
+            Fugir · {Math.round(chanceDeFugir * 100)}% de chance
+          </button>
         </div>
       )}
     </section>

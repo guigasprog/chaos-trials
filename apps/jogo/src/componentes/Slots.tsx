@@ -207,7 +207,7 @@ export function Slots({
       </ul>
 
       <p className="mt-10 text-[0.8rem] leading-relaxed text-tinta-fraca">
-        Morrer num julgamento é permanente. O personagem fica no túmulo com
+        Perder a última vida é permanente. O personagem fica no túmulo com
         tudo intacto e volta pagando o revive — ou você apaga e abre a vaga,
         perdendo as camadas. A moeda comprada é da conta e sobrevive aos dois
         caminhos.

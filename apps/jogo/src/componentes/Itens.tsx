@@ -232,8 +232,8 @@ export function Itens({
           </p>
           {p.mochila.length === 0 ? (
             <p className="painel p-5 text-[0.88rem] leading-relaxed text-tinta-fraca">
-              Nada guardado. Vitórias largam peças; o julgamento larga
-              sempre, e larga melhor.
+              Nada guardado. Vitórias largam peças de vez em quando —
+              dificuldades maiores largam mais, e largam melhor.
             </p>
           ) : (
             <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">

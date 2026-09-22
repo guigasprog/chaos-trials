@@ -27,7 +27,7 @@ export function Ficha({
   aoAtualizar: (p: Personagem) => void;
   /** O revive cobra da conta; a barra do herói precisa saber. */
   aoAtualizarConta: () => void;
-  aoLutar: (tipo: "comum" | "julgamento") => void;
+  aoLutar: () => void;
   /** A saída do túmulo pra quem não vai (ou não pode) reviver agora — sem
       isso a única saída era descobrir sozinho que o retrato no HUD troca
       de personagem. */
@@ -51,8 +51,8 @@ export function Ficha({
   const noTumulo = p.estado === "tumulo";
   const fracaoXp = Math.min(1, p.xp / p.xpDoNivel);
   const rumoAParede = Math.min(1, p.nivel / p.parede);
-  // Abaixo de um terço a vida vira aviso: é a diferença entre entrar numa
-  // luta e entrar num julgamento sem perceber que está machucado.
+  // Abaixo de um terço a vida vira aviso: é a diferença entre lutar sabendo
+  // do risco e lutar sem perceber que está machucado.
   const ferido = p.vida / p.vidaMaxima < 0.35;
 
   return (
@@ -172,7 +172,7 @@ export function Ficha({
 
       {noTumulo ? (
         <div className="painel flex flex-col gap-4 p-6">
-          <p className="titulo text-2xl">Você caiu num julgamento.</p>
+          <p className="titulo text-2xl">A última vida acabou.</p>
           <p className="text-[0.9rem] leading-relaxed text-tinta-fraca">
             O túmulo guarda tudo — nível, camada, classe e sucata voltam
             intactos. A saída custa {n(p.custoDoRevive)} de moeda premium da
@@ -272,37 +272,45 @@ export function Ficha({
               </button>
             )}
 
-            {/* Só os dois verbos de luta aqui. A árvore mora na barra do
-                herói, onde ela fica ao alcance de qualquer tela. */}
-            <button
-              type="button"
-              onClick={() => aoLutar("comum")}
-              disabled={ocupado}
-              className="botao botao-grande"
-            >
-              Enfrentar uma sombra
-            </button>
-
-            {/* Dois cliques: é a luta em que se morre, e um clique acidental
-                não pode custar o personagem. */}
-            <button
-              type="button"
-              onClick={() => {
-                if (confirmando) {
-                  setConfirmando(false);
-                  aoLutar("julgamento");
-                } else {
-                  setConfirmando(true);
-                  setTimeout(() => setConfirmando(false), 4000);
-                }
-              }}
-              disabled={ocupado}
-              className="botao botao-grande botao-perigo"
-            >
-              {confirmando
-                ? "Clique de novo — perder é permanente"
-                : "Encarar um julgamento"}
-            </button>
+            {/* Só um verbo de luta agora: toda batalha carrega risco, e
+                quantas vidas amortecem isso é da dificuldade, não da
+                escolha por luta. Na última vida, sem reserva, dois
+                cliques — é a luta em que se morre de verdade, e um
+                clique acidental não pode custar o personagem. */}
+            {(() => {
+              const naUltimaVida = p.vidasRestantes <= 1 && p.vidasGuardadas === 0;
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!naUltimaVida) {
+                      aoLutar();
+                      return;
+                    }
+                    if (confirmando) {
+                      setConfirmando(false);
+                      aoLutar();
+                    } else {
+                      setConfirmando(true);
+                      setTimeout(() => setConfirmando(false), 4000);
+                    }
+                  }}
+                  disabled={ocupado}
+                  className={`botao botao-grande ${naUltimaVida ? "botao-perigo" : ""}`}
+                  title={
+                    naUltimaVida
+                      ? "sem vida de reserva — perder aqui é permanente"
+                      : `${p.vidasRestantes} vida${p.vidasRestantes === 1 ? "" : "s"} de reserva`
+                  }
+                >
+                  {naUltimaVida && confirmando
+                    ? "Clique de novo — perder é permanente"
+                    : naUltimaVida
+                      ? "Lutar — última vida"
+                      : `Lutar (${p.vidasRestantes} vida${p.vidasRestantes === 1 ? "" : "s"})`}
+                </button>
+              );
+            })()}
           </div>
         </>
       )}

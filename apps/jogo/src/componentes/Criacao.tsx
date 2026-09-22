@@ -23,6 +23,21 @@ const ATRIBUTO: Record<number, string> = {
   5: "Vigor",
 };
 
+type Dificuldade = "facil" | "medio" | "dificil";
+
+/** Fixa depois de escolhida: muda a curva de monstro e de recompensa, e
+    trocar no meio da vida do personagem quebraria a curva medida. */
+const DIFICULDADES: {
+  id: Dificuldade;
+  nome: string;
+  vidas: number;
+  descricao: string;
+}[] = [
+  { id: "facil", nome: "Fácil", vidas: 3, descricao: "Monstros mais fracos. Prêmio menor." },
+  { id: "medio", nome: "Médio", vidas: 2, descricao: "O equilíbrio de sempre." },
+  { id: "dificil", nome: "Difícil", vidas: 1, descricao: "Monstros mais fortes. Prêmio bem maior." },
+];
+
 /**
  * A escolha da classe como faixa de lâminas inclinadas.
  *
@@ -47,6 +62,7 @@ export function Criacao({
   const [classe, setClasse] = useState<number | null>(null);
   const [sobre, setSobre] = useState<number | null>(null);
   const [nome, setNome] = useState("");
+  const [dificuldade, setDificuldade] = useState<Dificuldade>("medio");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -62,7 +78,7 @@ export function Criacao({
     setEnviando(true);
     setErro(null);
     try {
-      aoCriar(await api.criar(nome.trim(), classe));
+      aoCriar(await api.criar(nome.trim(), classe, dificuldade));
     } catch (e) {
       setErro(e instanceof ErroDaApi ? e.message : "não deu para criar");
       setEnviando(false);
@@ -93,8 +109,8 @@ export function Criacao({
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-[0.95rem] leading-relaxed text-tinta-fraca">
           A raiz decide como você luta. Ela se ramifica em 45 caminhos, e você
-          só conhece os seus vivendo até eles. Perder um julgamento é
-          permanente.
+          só conhece os seus vivendo até eles. Toda luta arrisca uma vida —
+          quantas você tem é a dificuldade que escolher a seguir.
         </p>
       </header>
 
@@ -175,6 +191,36 @@ export function Criacao({
               className="campo"
             />
           </label>
+
+          <div className="flex flex-col gap-2">
+            <span className="rotulo">Dificuldade</span>
+            {/* Fixa depois de criado — não é um filtro de batalha, é o
+                personagem inteiro. Por isso pede decisão aqui, não "troco
+                depois se não gostar". */}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {DIFICULDADES.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setDificuldade(d.id)}
+                  aria-pressed={dificuldade === d.id}
+                  className={`painel flex-1 p-3 text-left transition-colors ${
+                    dificuldade === d.id ? "border-ouro" : ""
+                  }`}
+                >
+                  <span className="flex items-baseline justify-between">
+                    <span className="titulo text-lg">{d.nome}</span>
+                    <span className="rotulo">
+                      {d.vidas} vida{d.vidas > 1 ? "s" : ""}
+                    </span>
+                  </span>
+                  <span className="mt-1 block text-[0.78rem] text-tinta-fraca">
+                    {d.descricao}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           {erro && <p className="text-[0.85rem] text-sangue">{erro}</p>}
 

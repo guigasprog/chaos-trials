@@ -128,6 +128,14 @@ export interface Personagem {
   /** Pontuação na arena, e o histórico de duelos dos dois lados. */
   elo: number;
   duelos: { vitorias: number; derrotas: number; defesas: number };
+  /** Fixa desde a criação — muda a curva de monstro e de recompensa. */
+  dificuldade: "facil" | "medio" | "dificil";
+  /** Quantas derrotas ainda aguenta antes do túmulo. */
+  vidasRestantes: number;
+  /** A reserva rara — some para cobrir a queda quando `vidasRestantes`
+      chegaria a zero. */
+  vidasGuardadas: number;
+  vidasGuardadasMaximo: number;
   podeRenascer: boolean;
   subclasses: { indice: number; nome: string }[];
   habilidades: { id: string; nome: string; descricao: string; recarga: number }[];
@@ -209,15 +217,25 @@ export interface Resultado {
   niveisSubidos: number;
   morreu: boolean;
   recuou?: boolean;
+  /** Se uma vida guardada cobriu esta derrota — o túmulo estava logo ali. */
+  vidaGuardadaUsada?: boolean;
+  vidasRestantes?: number;
+  vidasGuardadas?: number;
   /** O que a vitória largou, se largou. */
   queda?: Item | null;
+  /** Achado raro: uma vida extra guardada, na vitória. */
+  vidaExtra?: boolean;
+  /** Fugiu com sucesso — sem prêmio, sem vida perdida. */
+  fugiu?: boolean;
   personagem?: Personagem;
 }
 
 export interface Batalha {
   id: string;
-  tipo: "comum" | "julgamento";
-  mortal: boolean;
+  dificuldade: "facil" | "medio" | "dificil";
+  vidasRestantes: number;
+  vidasGuardadas: number;
+  chanceDeFugir: number;
   estado: EstadoDaBatalha;
   eventos: Evento[];
   resultado: Resultado | null;
@@ -293,25 +311,32 @@ export const api = {
   apagar: (id: string) =>
     pedir<{ ok: boolean }>(`/personagens/${id}`, { metodo: "DELETE" }),
 
-  criar: (nome: string, classe: number) =>
+  criar: (nome: string, classe: number, dificuldade?: "facil" | "medio" | "dificil") =>
     pedir<Personagem>("/personagens", {
       metodo: "POST",
-      corpo: { nome, classe },
+      corpo: { nome, classe, ...(dificuldade ? { dificuldade } : {}) },
     }),
 
   buscar: (id: string) => pedir<Personagem>(`/personagens/${id}`),
 
-  iniciarBatalha: (id: string, tipo: "comum" | "julgamento") =>
-    pedir<Batalha>(`/personagens/${id}/batalhas`, {
-      metodo: "POST",
-      corpo: { tipo },
-    }),
+  iniciarBatalha: (id: string) =>
+    pedir<Batalha>(`/personagens/${id}/batalhas`, { metodo: "POST" }),
 
   agir: (batalha: string, habilidade: string) =>
-    pedir<{ estado: EstadoDaBatalha; eventos: Evento[]; resultado: Resultado | null }>(
-      `/batalhas/${batalha}/turnos`,
-      { metodo: "POST", corpo: { habilidade } },
-    ),
+    pedir<{
+      estado: EstadoDaBatalha;
+      eventos: Evento[];
+      resultado: Resultado | null;
+      chanceDeFugir?: number;
+    }>(`/batalhas/${batalha}/turnos`, { metodo: "POST", corpo: { habilidade } }),
+
+  fugir: (batalha: string) =>
+    pedir<{
+      estado: EstadoDaBatalha;
+      eventos: Evento[];
+      resultado: Resultado | null;
+      chanceDeFugir?: number;
+    }>(`/batalhas/${batalha}/turnos`, { metodo: "POST", corpo: { fugir: true } }),
 
   escolherSubclasse: (id: string, classe: number) =>
     pedir<Personagem>(`/personagens/${id}/subclasse`, {
@@ -390,7 +415,11 @@ export const api = {
     }>(`/mercado/${id}/comprar`, { metodo: "POST", corpo: { personagem } }),
 
   loja: () =>
-    pedir<{ vagas: VagaDaLoja[]; proximaTrocaEm: number }>("/loja"),
+    pedir<{
+      vagas: VagaDaLoja[];
+      proximaTrocaEm: number;
+      amuleto: { preco: number; moeda: Moeda };
+    }>("/loja"),
 
   comprarDaLoja: (id: string, personagem: string) =>
     pedir<{
@@ -399,6 +428,12 @@ export const api = {
       moeda: Moeda;
       personagem: Personagem;
     }>("/loja/comprar", { metodo: "POST", corpo: { id, personagem } }),
+
+  comprarAmuleto: (personagem: string) =>
+    pedir<{ pagou: number; personagem: Personagem }>("/loja/amuleto", {
+      metodo: "POST",
+      corpo: { personagem },
+    }),
 
   evoluirArvore: (id: string, no: string) =>
     pedir<Personagem>(`/personagens/${id}/arvore`, {

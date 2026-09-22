@@ -1,7 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { FastifyInstance } from "fastify";
-import { type Conta, type Personagem } from "@chaos/dominio";
+import {
+  type Conta,
+  type Personagem,
+  PRECO_DO_AMULETO_DE_VIDA,
+  VIDAS_GUARDADAS_MAXIMO,
+} from "@chaos/dominio";
 import { criarAplicacao } from "../src/aplicacao.ts";
 import { emMemoria } from "../src/armazenamento.ts";
 import { Sessoes } from "../src/sessoes.ts";
@@ -170,5 +175,72 @@ describe("loja", () => {
     const { app } = bancada();
     const r = await app.inject({ method: "GET", url: "/loja" });
     assert.equal(r.statusCode, 401);
+  });
+
+  it("o preço do amuleto vem na resposta", async () => {
+    const { app, headers } = bancada();
+    const r = await app.inject({ method: "GET", url: "/loja", headers });
+    const corpo = JSON.parse(r.body);
+    assert.equal(corpo.amuleto.preco, PRECO_DO_AMULETO_DE_VIDA);
+    assert.equal(corpo.amuleto.moeda, "premium");
+  });
+});
+
+describe("amuleto de vida extra", () => {
+  it("cobra da CONTA e soma uma vida guardada", async () => {
+    const { app, headers } = bancada({ premium: PRECO_DO_AMULETO_DE_VIDA });
+    const r = await app.inject({
+      method: "POST",
+      url: "/loja/amuleto",
+      headers,
+      payload: { personagem: "p1" },
+    });
+    assert.equal(r.statusCode, 200, r.body);
+    const corpo = JSON.parse(r.body);
+    assert.equal(corpo.pagou, PRECO_DO_AMULETO_DE_VIDA);
+    assert.equal(corpo.personagem.vidasGuardadas, 1);
+    assert.equal(corpo.personagem.sucata, 10_000, "sucata não é a moeda do amuleto");
+
+    const eu = await app.inject({ method: "GET", url: "/eu", headers });
+    assert.equal(JSON.parse(eu.body).conta.premium, 0);
+  });
+
+  it("sem saldo, recusa dizendo os dois números", async () => {
+    const { app, headers } = bancada({ premium: 10 });
+    const r = await app.inject({
+      method: "POST",
+      url: "/loja/amuleto",
+      headers,
+      payload: { personagem: "p1" },
+    });
+    assert.equal(r.statusCode, 400);
+    assert.match(r.json().erro, new RegExp(`${PRECO_DO_AMULETO_DE_VIDA}.*10`));
+  });
+
+  it("no teto de vidas guardadas, recusa mesmo com saldo", async () => {
+    const { app, armazenamento, headers } = bancada({
+      premium: PRECO_DO_AMULETO_DE_VIDA * 2,
+    });
+    await armazenamento.personagens.salvar(
+      heroi("p1", { vidasGuardadas: VIDAS_GUARDADAS_MAXIMO }),
+    );
+    const r = await app.inject({
+      method: "POST",
+      url: "/loja/amuleto",
+      headers,
+      payload: { personagem: "p1" },
+    });
+    assert.equal(r.statusCode, 409);
+    assert.match(r.json().erro, /teto/);
+  });
+
+  it("a rota exige sessão e dono", async () => {
+    const { app } = bancada();
+    const semSessao = await app.inject({
+      method: "POST",
+      url: "/loja/amuleto",
+      payload: { personagem: "p1" },
+    });
+    assert.equal(semSessao.statusCode, 401);
   });
 });

@@ -141,13 +141,13 @@ export default function Jogo() {
     [escolher, recarregar],
   );
 
-  async function lutar(tipo: "comum" | "julgamento") {
+  async function lutar() {
     if (!p) return;
     setOcupado(true);
     setErro(null);
     setResultado(null);
     try {
-      setBatalha(await api.iniciarBatalha(p.id, tipo));
+      setBatalha(await api.iniciarBatalha(p.id));
     } catch (e) {
       setErro(e instanceof ErroDaApi ? e.message : "a batalha não começou");
     } finally {
@@ -161,7 +161,7 @@ export default function Jogo() {
     if (!p) return;
     try {
       setP(await api.buscar(p.id));
-      // A conta pode ter mudado junto — e se este foi o julgamento fatal, a
+      // A conta pode ter mudado junto — e se esta foi a última vida, a
       // prateleira precisa saber.
       void recarregar();
     } catch {
@@ -259,21 +259,28 @@ export default function Jogo() {
             {resultado && (
               <div className="painel surge mb-10 flex flex-col gap-3 p-6">
                 <p className="titulo text-3xl">
-                  {resultado.venceu
-                    ? "Você venceu."
-                    : resultado.morreu
-                      ? "Você caiu."
-                      : "Você recuou."}
+                  {resultado.fugiu
+                    ? "Você fugiu."
+                    : resultado.venceu
+                      ? "Você venceu."
+                      : resultado.morreu
+                        ? "Você caiu."
+                        : "Você recuou."}
                 </p>
                 <p className="text-[0.9rem] leading-relaxed text-tinta-fraca">
-                  {resultado.venceu
-                    ? `+${resultado.xp} de experiência, +${resultado.sucata} de sucata` +
-                      (resultado.niveisSubidos > 0
-                        ? ` — e ${resultado.niveisSubidos} nível${resultado.niveisSubidos > 1 ? "s" : ""}.`
-                        : ".")
-                    : resultado.morreu
-                      ? "O julgamento cobrou o que prometeu. Seu personagem está no túmulo."
-                      : "Ferido, mas vivo. Batalha comum não mata — só julgamento."}
+                  {resultado.fugiu
+                    ? "Sem prêmio, sem vida perdida — a luta acabou aqui."
+                    : resultado.venceu
+                      ? `+${resultado.xp} de experiência, +${resultado.sucata} de sucata` +
+                        (resultado.niveisSubidos > 0
+                          ? ` — e ${resultado.niveisSubidos} nível${resultado.niveisSubidos > 1 ? "s" : ""}.`
+                          : ".") +
+                        (resultado.vidaExtra ? " Achou uma vida extra guardada!" : "")
+                      : resultado.morreu
+                        ? "Sem vida de reserva, a queda foi de vez. Seu personagem está no túmulo."
+                        : resultado.vidaGuardadaUsada
+                          ? "Uma vida guardada cobriu a queda — por pouco."
+                          : `Ferido, mas vivo. Restam ${resultado.vidasRestantes} vida${resultado.vidasRestantes === 1 ? "" : "s"}.`}
                 </p>
 
                 {/* A queda tem cartão próprio: um achado no meio de uma
