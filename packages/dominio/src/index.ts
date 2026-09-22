@@ -8,6 +8,7 @@ export * from "./aleatorio.ts";
 export * from "./efeitos.ts";
 export * from "./habilidades.ts";
 export * from "./batalha.ts";
+export * from "./combate-tempo-real.ts";
 export * from "./personagem.ts";
 export {
   SLOTS_GRATIS,

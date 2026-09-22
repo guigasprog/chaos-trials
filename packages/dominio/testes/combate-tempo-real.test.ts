@@ -8,6 +8,7 @@ import {
   atacar,
   decidirAcaoDoInimigo,
   resolverAtaqueDoInimigo,
+  avancarTick,
   RAIAS,
   DISTANCIAS,
 } from "../src/combate-tempo-real.ts";
@@ -282,5 +283,74 @@ describe("resolverAtaqueDoInimigo", () => {
     };
     const depois = resolverAtaqueDoInimigo(separados);
     assert.equal(depois.jogador.vida, separados.jogador.vida);
+  });
+});
+
+describe("avancarTick", () => {
+  it("decrementa esquiva e recarga de esquiva do jogador", () => {
+    const sala = iniciarEsquiva(novaSala());
+    const depois = avancarTick(sala);
+    assert.equal(depois.jogador.esquivandoPor, sala.jogador.esquivandoPor - 1);
+    assert.equal(depois.jogador.recargaDeEsquivaPor, sala.jogador.recargaDeEsquivaPor - 1);
+  });
+
+  it("nunca decrementa abaixo de zero", () => {
+    const sala = novaSala(); // esquivandoPor já é 0
+    const depois = avancarTick(sala);
+    assert.equal(depois.jogador.esquivandoPor, 0);
+  });
+
+  it("telégrafo em andamento decrementa; ao chegar a zero, resolve o ataque", () => {
+    const base = salaComInimigoNaMesmaPosicao();
+    const telegrafando = {
+      ...base,
+      jogador: { ...base.jogador, raia: base.inimigo.raia, distancia: base.inimigo.distancia },
+      inimigo: { ...base.inimigo, telegrafandoPor: 1 },
+    };
+    const depois = avancarTick(telegrafando);
+    assert.equal(depois.inimigo.telegrafandoPor, null);
+    assert.ok(depois.jogador.vida < telegrafando.jogador.vida, "o golpe devia ter resolvido e acertado");
+  });
+
+  it("inimigo comum derrotado avança pra próxima onda, jogador mantém a vida que tinha", () => {
+    const sala = { ...novaSala(), inimigo: { ...novaSala().inimigo, vida: 0 } };
+    const depois = avancarTick(sala);
+    assert.equal(depois.onda, 2);
+    assert.equal(depois.fase, "em-andamento");
+    assert.equal(depois.jogador.vida, sala.jogador.vida, "vida atravessa entre ondas, não cura");
+    assert.notEqual(depois.inimigo, sala.inimigo, "novo inimigo spawnou");
+    assert.ok(depois.inimigo.vida > 0);
+  });
+
+  it("chefe derrotado (onda além das comuns) termina a sala em vitória", () => {
+    const salaNoChefe = {
+      ...novaSala(),
+      onda: 4, // ONDAS_COMUNS_ANTES_DO_CHEFE (3) + 1
+      inimigo: { ...novaSala().inimigo, tipo: "chefe" as const, vida: 0 },
+    };
+    const depois = avancarTick(salaNoChefe);
+    assert.equal(depois.fase, "vitoria");
+  });
+
+  it("jogador com vida zero termina a sala em derrota, mesmo com o inimigo vivo", () => {
+    const sala = { ...novaSala(), jogador: { ...novaSala().jogador, vida: 0 } };
+    const depois = avancarTick(sala);
+    assert.equal(depois.fase, "derrota");
+  });
+
+  it("sala já terminada (vitória ou derrota) não muda mais nada", () => {
+    const venceu = { ...novaSala(), fase: "vitoria" as const };
+    assert.deepEqual(avancarTick(venceu), venceu);
+    const perdeu = { ...novaSala(), fase: "derrota" as const };
+    assert.deepEqual(avancarTick(perdeu), perdeu);
+  });
+
+  it("sem telégrafo e fora de alcance, o inimigo persegue no tick", () => {
+    const sala = {
+      ...novaSala(),
+      inimigo: { ...novaSala().inimigo, raia: "direita" as const },
+    };
+    const depois = avancarTick(sala);
+    assert.equal(depois.inimigo.raia, "centro");
   });
 });

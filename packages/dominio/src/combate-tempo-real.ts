@@ -10,7 +10,7 @@ import {
   VIDA_DO_CHEFE_NA_SALA,
   TELEGRAFO_DO_INIMIGO_EM_TICKS,
 } from "./balanceamento.ts";
-import { chance } from "./aleatorio.ts";
+import { chance, sortear } from "./aleatorio.ts";
 
 /**
  * O combate em tempo real — Fase 1: sala PvE contra um chefe.
@@ -242,4 +242,75 @@ export function resolverAtaqueDoInimigo(sala: Sala): Sala {
       ? { ...sala.jogador, vida: Math.max(0, sala.jogador.vida - sala.inimigo.dano) }
       : sala.jogador,
   };
+}
+
+function decrementar(v: number): number {
+  return Math.max(0, v - 1);
+}
+
+/**
+ * O único ponto de entrada do loop do servidor (10 ticks/s) — decrementa
+ * temporizadores, resolve ou avança o telégrafo do inimigo, e decide
+ * vitória/derrota. A ORDEM importa: um jogador que morre do golpe
+ * resolvido neste mesmo tick não deve seguir para os checks de vida do
+ * inimigo com dados de uma ação que nunca deveria ter acontecido — por
+ * isso cada estágio retorna cedo assim que a sala termina.
+ */
+export function avancarTick(sala: Sala): Sala {
+  if (sala.fase !== "em-andamento") return sala;
+
+  // 1. Temporizadores do jogador.
+  let atual: Sala = {
+    ...sala,
+    jogador: {
+      ...sala.jogador,
+      esquivandoPor: decrementar(sala.jogador.esquivandoPor),
+      recargaDeEsquivaPor: decrementar(sala.jogador.recargaDeEsquivaPor),
+    },
+  };
+
+  // 2. Jogador morreu num golpe anterior? Derrota, sem processar mais nada.
+  if (atual.jogador.vida <= 0) {
+    return { ...atual, fase: "derrota" };
+  }
+
+  // 3. Telégrafo do inimigo: decrementa, e resolve ao chegar em zero.
+  if (atual.inimigo.telegrafandoPor !== null) {
+    const restante = atual.inimigo.telegrafandoPor - 1;
+    if (restante <= 0) {
+      atual = resolverAtaqueDoInimigo(atual);
+    } else {
+      atual = { ...atual, inimigo: { ...atual.inimigo, telegrafandoPor: restante } };
+    }
+  } else {
+    atual = decidirAcaoDoInimigo(atual);
+  }
+
+  // 4. Jogador morreu no golpe que acabou de resolver.
+  if (atual.jogador.vida <= 0) {
+    return { ...atual, fase: "derrota" };
+  }
+
+  // 5. Inimigo morreu (pelo golpe do jogador, chamado fora deste laço —
+  //    ver `atacar`). Avança onda ou vence a sala.
+  if (atual.inimigo.vida <= 0) {
+    if (atual.inimigo.tipo === "chefe") {
+      return { ...atual, fase: "vitoria" };
+    }
+    const proximaOnda = atual.onda + 1;
+    const rolo = sortear(atual.semente);
+    return {
+      ...atual,
+      onda: proximaOnda,
+      semente: rolo.semente,
+      inimigo: inimigoDaOnda({
+        onda: proximaOnda,
+        classeDoJogador: atual.classeDoJogador,
+        nivelDoJogador: atual.nivelDoJogador,
+        semente: rolo.semente,
+      }),
+    };
+  }
+
+  return atual;
 }
