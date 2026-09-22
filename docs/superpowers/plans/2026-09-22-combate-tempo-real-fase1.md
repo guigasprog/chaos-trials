@@ -1542,9 +1542,13 @@ git commit -m "feat(jogo): cliente WebSocket do combate em tempo real"
 - Create: `apps/jogo/src/componentes/CombateTempoReal.tsx`
 
 **Interfaces:**
-- Consumes: `conectarSalaTempoReal` (Task 8), `type Personagem` (`@/lib/api.ts`).
-- Produces: `<CombateTempoReal personagemId={string} aoFechar={() => void} aoAtualizar={(p: Personagem) => void} />`
-  — componente React default export nomeado.
+- Consumes: `conectarSalaTempoReal(personagemId, aoReceberEstado, aoFechar)` (Task 8).
+- Produces: `<CombateTempoReal personagemId={string} aoFechar={() => void} />`
+  — componente nomeado, exportado via `export function CombateTempoReal`.
+  Sem prop `aoAtualizar`: o servidor já grava o resultado no personagem
+  quando a sala termina (Task 6), então quem chama `aoFechar` só precisa
+  recarregar o personagem do zero — não receber um objeto atualizado de
+  volta. Ver a nota no fim deste Task.
 
 - [ ] **Step 1: Conferir o formato visual já estabelecido**
 
