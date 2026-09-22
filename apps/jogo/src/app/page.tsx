@@ -224,6 +224,7 @@ export default function Jogo() {
           setP(null);
           setLugar("slots");
         }}
+        aoSair={sair}
         travado={emCombate || painel !== "ficha"}
       />
 

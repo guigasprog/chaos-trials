@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { type Conta, type Personagem } from "@/lib/api";
 import { n } from "@/lib/numero";
 import { PALETAS } from "@/lib/vitral";
@@ -28,6 +29,7 @@ export function Hud({
   aoAbrirMercado,
   aoAbrirArena,
   aoTrocar,
+  aoSair,
   travado,
 }: {
   p: Personagem;
@@ -37,26 +39,58 @@ export function Hud({
   aoAbrirMercado: () => void;
   aoAbrirArena: () => void;
   aoTrocar: () => void;
+  aoSair: () => void;
   /** Em combate a árvore não abre: gastar ponto no meio da luta é trapaça. */
   travado: boolean;
 }) {
   const paleta = PALETAS[p.classe.ramo];
   const noTumulo = p.estado === "tumulo";
+  /** Antes a única saída da conta, de dentro do jogo, era descobrir que o
+      retrato troca de personagem e DEPOIS achar "Sair" na prateleira — dois
+      passos escondidos atrás de um ícone sem rótulo. Um menu de verdade,
+      com as duas ações escritas. */
+  const [menuAberto, setMenuAberto] = useState(false);
 
   return (
     <header className="hud">
-      {/* O retrato é o caminho de volta à prateleira: é o objeto que
-          representa "este personagem", e clicar nele para trocar de
-          personagem é o gesto que a pessoa tenta primeiro. */}
-      <button
-        type="button"
-        onClick={aoTrocar}
-        disabled={travado}
-        title={travado ? "termine a luta primeiro" : "Trocar de personagem"}
-        className="hud-retrato"
-      >
-        <Vitral classe={p.classe.indice} largura={34} aceso={!noTumulo} />
-      </button>
+      <div className="hud-menu">
+        <button
+          type="button"
+          onClick={() => setMenuAberto((a) => !a)}
+          disabled={travado}
+          title={travado ? "termine a luta primeiro" : "Menu"}
+          aria-label="Menu"
+          aria-expanded={menuAberto}
+          className="hud-retrato"
+        >
+          <Vitral classe={p.classe.indice} largura={34} aceso={!noTumulo} />
+        </button>
+
+        {menuAberto && (
+          <div className="hud-menu-painel painel">
+            <button
+              type="button"
+              onClick={() => {
+                setMenuAberto(false);
+                aoTrocar();
+              }}
+              className="hud-menu-item"
+            >
+              Trocar de personagem
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuAberto(false);
+                aoSair();
+              }}
+              className="hud-menu-item"
+            >
+              Sair da conta
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="min-w-0 flex-1">
         <p className="hud-nome">{p.nome}</p>
