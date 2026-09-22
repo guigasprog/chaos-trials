@@ -211,10 +211,14 @@ export function Mercado({
                       type="button"
                       disabled={ocupado || a.meu || caro}
                       onClick={() =>
-                        tentar(
-                          () => api.comprarAnuncio(a.id, p.id),
-                          `${a.item.nome} está na mochila.`,
-                        )
+                        tentar(async () => {
+                          const r = await api.comprarAnuncio(a.id, p.id);
+                          // Sem isto a compra funcionava no servidor e a
+                          // peça só aparecia depois de trocar de tela: a
+                          // ficha em memória (`p`) nunca sabia que a
+                          // mochila tinha mudado.
+                          aoAtualizar(r.personagem);
+                        }, `${a.item.nome} está na mochila.`)
                       }
                       className="botao"
                       title={
