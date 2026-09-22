@@ -9,6 +9,7 @@ import {
   type Item,
   type Moeda,
   type Personagem,
+  type VagaDaLoja,
 } from "@/lib/api";
 import { n } from "@/lib/numero";
 
@@ -38,6 +39,14 @@ function Moedinha({ valor, moeda }: { valor: number; moeda: Moeda }) {
   );
 }
 
+/** "1h23min" — sem casas de segundo, que ninguém vai cronometrar a troca. */
+function tempoRestante(ms: number): string {
+  const minutos = Math.max(1, Math.round(ms / 60_000));
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  return h > 0 ? `${h}h${m > 0 ? `${m}min` : ""}` : `${m}min`;
+}
+
 /** As propriedades da peça, compactas — é o que decide a compra. */
 function Propriedades({ item }: { item: Item }) {
   return (
@@ -64,7 +73,7 @@ export function Mercado({
   aoAtualizarConta: () => void;
   aoFechar: () => void;
 }) {
-  const [aba, setAba] = useState<"vitrine" | "meus">("vitrine");
+  const [aba, setAba] = useState<"vitrine" | "meus" | "loja">("vitrine");
   const [moedaFiltro, setMoedaFiltro] = useState<Moeda | "todas">("todas");
   const [vitrine, setVitrine] = useState<Anuncio[]>([]);
   const [meus, setMeus] = useState<Anuncio[]>([]);
@@ -73,6 +82,11 @@ export function Mercado({
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+
+  // A prateleira da casa — sem vendedor, sem "meus anúncios", troca sozinha.
+  const [vagasDaLoja, setVagasDaLoja] = useState<VagaDaLoja[]>([]);
+  const [trocaDaLojaEm, setTrocaDaLojaEm] = useState(0);
+  const [carregandoLoja, setCarregandoLoja] = useState(true);
 
   // Rascunho do anúncio: qual peça, por quanto, em qual moeda.
   const [aVender, setAVender] = useState<string | null>(null);
@@ -97,6 +111,24 @@ export function Mercado({
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  const carregarLoja = useCallback(async () => {
+    setCarregandoLoja(true);
+    try {
+      const r = await api.loja();
+      setVagasDaLoja(r.vagas);
+      setTrocaDaLojaEm(r.proximaTrocaEm);
+      setErro(null);
+    } catch (e) {
+      setErro(e instanceof ErroDaApi ? e.message : "a loja não abriu");
+    } finally {
+      setCarregandoLoja(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (aba === "loja") void carregarLoja();
+  }, [aba, carregarLoja]);
 
   async function tentar(acao: () => Promise<unknown>, depois?: string) {
     setOcupado(true);
@@ -141,15 +173,19 @@ export function Mercado({
 
       <div className="flex flex-wrap items-center gap-3">
         {/* Por PAPEL, e não por tipo de dado: quem entra já sabe se está
-            comprando ou vendendo. */}
-        {(["vitrine", "meus"] as const).map((qual) => (
+            comprando, vendendo, ou na prateleira da casa. */}
+        {(["vitrine", "meus", "loja"] as const).map((qual) => (
           <button
             key={qual}
             type="button"
             onClick={() => setAba(qual)}
             className={`aba ${aba === qual ? "aba-ativa" : ""}`}
           >
-            {qual === "vitrine" ? "Comprar" : `Vender (${meus.filter((a) => a.estado === "aberto").length})`}
+            {qual === "vitrine"
+              ? "Comprar"
+              : qual === "meus"
+                ? `Vender (${meus.filter((a) => a.estado === "aberto").length})`
+                : "Loja"}
           </button>
         ))}
 
@@ -245,7 +281,7 @@ export function Mercado({
             })}
           </ul>
         )
-      ) : (
+      ) : aba === "meus" ? (
         <div className="flex flex-col gap-6">
           <div className="painel flex flex-col gap-4 p-5">
             <p className="titulo text-2xl">Anunciar uma peça</p>
@@ -405,6 +441,59 @@ export function Mercado({
               </ul>
             )}
           </div>
+        </div>
+      ) : carregandoLoja ? (
+        <p className="rotulo">abrindo a prateleira…</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <p className="text-[0.82rem] text-tinta-fraca">
+            Seis vagas, de um vendedor que não é ninguém. Trocam em{" "}
+            <strong className="text-ouro-claro">
+              {tempoRestante(trocaDaLojaEm)}
+            </strong>
+            .
+          </p>
+          <ul className="flex flex-col gap-3">
+            {vagasDaLoja.map((v) => {
+              const caro = saldoDe(v.moeda) < v.preco;
+              return (
+                <li
+                  key={v.id}
+                  className="anuncio"
+                  style={{ "--raro": v.item.cor } as React.CSSProperties}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="titulo text-xl" style={{ color: v.item.cor }}>
+                      {v.item.nome}
+                    </p>
+                    <p className="rotulo mt-0.5">
+                      {v.item.raridadeNome} · {v.item.encaixeNome} · nível{" "}
+                      {v.item.nivel} · {n(v.item.poder)} de poder
+                    </p>
+                    <Propriedades item={v.item} />
+                  </div>
+
+                  <div className="flex flex-none flex-col items-end gap-2">
+                    <Moedinha valor={v.preco} moeda={v.moeda} />
+                    <button
+                      type="button"
+                      disabled={ocupado || caro}
+                      onClick={() =>
+                        tentar(async () => {
+                          const r = await api.comprarDaLoja(v.id, p.id);
+                          aoAtualizar(r.personagem);
+                        }, `${v.item.nome} está na mochila.`)
+                      }
+                      className="botao"
+                      title={caro ? `você tem ${n(saldoDe(v.moeda))}` : "Comprar"}
+                    >
+                      {caro ? "sem saldo" : `Comprar por ${n(v.preco)}`}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

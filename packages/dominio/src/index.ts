@@ -17,6 +17,7 @@ export * from "./arvore.ts";
 export * from "./item.ts";
 export * from "./arena.ts";
 export * from "./conta.ts";
+export * from "./loja.ts";
 export {
   type Anuncio,
   type EstadoDoAnuncio,
@@ -38,6 +39,7 @@ export {
   ELO_PISO,
   ESPERA_DO_MESMO_ALVO_MS,
   DESCANSO_POR_HORA,
+  LOJA_TROCA_A_CADA_MS,
   POCAO_CURA,
   POCAO_EM_VITORIAS,
   PRECO_MAXIMO,

@@ -67,6 +67,14 @@ export interface Item {
 
 export type Moeda = "sucata" | "premium";
 
+/** Uma vaga da loja — sem vendedor: não é de ninguém, é da casa. */
+export interface VagaDaLoja {
+  id: string;
+  item: Item;
+  preco: number;
+  moeda: Moeda;
+}
+
 export interface Anuncio {
   id: string;
   item: Item;
@@ -380,6 +388,17 @@ export const api = {
       dizimo: number;
       personagem: Personagem;
     }>(`/mercado/${id}/comprar`, { metodo: "POST", corpo: { personagem } }),
+
+  loja: () =>
+    pedir<{ vagas: VagaDaLoja[]; proximaTrocaEm: number }>("/loja"),
+
+  comprarDaLoja: (id: string, personagem: string) =>
+    pedir<{
+      comprou: Item;
+      pagou: number;
+      moeda: Moeda;
+      personagem: Personagem;
+    }>("/loja/comprar", { metodo: "POST", corpo: { id, personagem } }),
 
   evoluirArvore: (id: string, no: string) =>
     pedir<Personagem>(`/personagens/${id}/arvore`, {

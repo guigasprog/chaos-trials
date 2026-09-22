@@ -48,6 +48,8 @@ import {
   guardarItem,
   type Item,
   itemNaMochila,
+  itensDaLoja,
+  proximaTrocaDaLojaEm,
   MOCHILA_MAXIMA,
   NOME_DO_ENCAIXE,
   normalizarConta,
@@ -1409,6 +1411,96 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
       aoVendedor,
     };
   }
+
+  // ── Loja ───────────────────────────────────────────────────────────────
+
+  /**
+   * A loja: seis vagas de um vendedor que não é ninguém, e que trocam
+   * sozinhas a cada hora — sem cron, sem estoque para gerenciar. Ver
+   * `packages/dominio/src/loja.ts`: a hora corrente é a semente inteira.
+   */
+  app.get("/loja", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    return {
+      vagas: itensDaLoja(agora()).map((v) => ({
+        id: v.id,
+        item: itemParaCliente(v.item),
+        preco: v.preco,
+        moeda: v.moeda,
+      })),
+      proximaTrocaEm: proximaTrocaDaLojaEm(agora()),
+    };
+  });
+
+  app.post("/loja/comprar", async (pedido, resposta) => {
+    const conta = await exigirConta(pedido, resposta);
+    if (!conta) return;
+    const corpo = pedido.body as { id?: string; personagem?: string };
+    if (!corpo?.id) return resposta.status(400).send({ erro: "diga qual vaga" });
+    if (!corpo?.personagem) {
+      return resposta.status(400).send({ erro: "diga qual personagem recebe" });
+    }
+
+    return filas.executarEm(
+      [chaveDaConta(conta.id), chaveDoPersonagem(corpo.personagem)],
+      async () => {
+        const atual = normalizarConta(
+          (await armazenamento.contas.buscar(conta.id)) as Conta,
+        );
+        const carregado = await meuPersonagem(atual, corpo.personagem!, resposta);
+        if (!carregado) return;
+        const comprador = carregado.personagem;
+
+        // Relido sob a trava, com a hora de agora — não a de quando a tela
+        // abriu. Se a hora virou no meio do caminho, a vaga pedida
+        // simplesmente não existe mais na prateleira nova, e a resposta diz
+        // isso em vez de vender um item que já não está à mostra.
+        const vaga = itensDaLoja(agora()).find((v) => v.id === corpo.id);
+        if (!vaga) {
+          return resposta
+            .status(404)
+            .send({ erro: "essa vaga não existe mais — a loja trocou" });
+        }
+
+        const saldo = vaga.moeda === "premium" ? atual.premium : comprador.sucata;
+        if (saldo < vaga.preco) {
+          return resposta
+            .status(400)
+            .send({ erro: `custa ${vaga.preco} e você tem ${saldo}` });
+        }
+        if (comprador.mochila.length >= MOCHILA_MAXIMA) {
+          return resposta.status(409).send({
+            erro: "a mochila está cheia — abra espaço antes de comprar",
+          });
+        }
+
+        // Sem vendedor para pagar: o preço inteiro é dízimo, do mesmo jeito
+        // que o mercado já precisa de um ralo — aqui ele só é automático.
+        if (vaga.moeda === "premium") {
+          await armazenamento.contas.salvar(debitarPremium(atual, vaga.preco));
+        }
+        const comAPeca = guardarItem(
+          {
+            ...comprador,
+            sucata:
+              vaga.moeda === "sucata"
+                ? comprador.sucata - vaga.preco
+                : comprador.sucata,
+          },
+          vaga.item,
+        );
+        await armazenamento.personagens.salvar(comAPeca);
+
+        return {
+          comprou: itemParaCliente(vaga.item),
+          pagou: vaga.preco,
+          moeda: vaga.moeda,
+          personagem: paraCliente(comAPeca),
+        };
+      },
+    );
+  });
 
   // ── Itens ──────────────────────────────────────────────────────────────
 

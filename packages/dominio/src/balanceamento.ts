@@ -412,3 +412,15 @@ export const PRECO_DO_SLOT_CRESCE = 1.6;
 
 /** Teto de slots. Existe para a tela caber e para o preço não virar piada. */
 export const SLOTS_MAXIMO = 10;
+
+// ── Loja ─────────────────────────────────────────────────────────────────
+
+/**
+ * Cada quanto tempo a prateleira da loja troca.
+ *
+ * Sem estoque nenhum para gerenciar: a hora corrente É a semente, então a
+ * mesma prateleira aparece pra todo mundo que olhar dentro da mesma hora, e
+ * troca sozinha na virada — sem cron, sem job, sem estado para perder num
+ * restart do servidor.
+ */
+export const LOJA_TROCA_A_CADA_MS = 60 * 60 * 1000;
