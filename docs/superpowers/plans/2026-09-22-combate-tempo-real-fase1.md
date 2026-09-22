@@ -166,7 +166,7 @@ describe("iniciarSala", () => {
   it("começa na onda 1, em andamento, jogador com a vida que entrou", () => {
     const sala = novaSala();
     assert.equal(sala.onda, 1);
-    assert.equal(sala.estado.fase, "em-andamento");
+    assert.equal(sala.fase, "em-andamento");
     assert.equal(sala.jogador.vida, 500);
     assert.equal(sala.jogador.vidaMaxima, 500);
   });
