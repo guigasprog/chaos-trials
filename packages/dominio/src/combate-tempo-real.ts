@@ -161,3 +161,20 @@ export function iniciarEsquiva(sala: Sala): Sala {
     },
   };
 }
+
+export function atacar(sala: Sala): Sala {
+  const acertou =
+    sala.jogador.raia === sala.inimigo.raia &&
+    sala.jogador.distancia === "perto" &&
+    sala.inimigo.esquivandoPor === 0;
+
+  if (!acertou) return sala;
+
+  return {
+    ...sala,
+    inimigo: {
+      ...sala.inimigo,
+      vida: Math.max(0, sala.inimigo.vida - sala.danoDoJogador),
+    },
+  };
+}
