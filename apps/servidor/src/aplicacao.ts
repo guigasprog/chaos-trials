@@ -1952,12 +1952,29 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     };
   }
 
-  registrarRotasDeTempoReal(app, {
-    armazenamento,
-    agora,
-    sessoes,
-    salas: salasTempoReal,
-    filas,
+  /*
+   * `criarAplicacao` é síncrona — não há `await` entre o `app.register(websocket)`
+   * lá em cima e este ponto, então o corpo do plugin (que registra o hook
+   * `onRoute` responsável por tratar `{ websocket: true }`) ainda não rodou:
+   * `register()` sempre adia a execução do plugin para depois do turno atual
+   * do event loop (via avvio), mesmo sem nenhum `await` explícito aqui.
+   * Declarar a rota diretamente em `app` nesta função faria o `onRoute` do
+   * `@fastify/websocket` rodar tarde demais para vê-la — o handler seria
+   * chamado como uma rota HTTP comum, com `(request, reply)` em vez de
+   * `(socket, req)`. Um `register()` aninhado resolve isso: o Fastify só
+   * executa o corpo de cada `register()` depois dos registrados antes dele
+   * na mesma fila (aqui, o `@fastify/websocket` lá em cima), então a rota só
+   * é declarada quando o hook já está ativo — o mesmo padrão do próprio
+   * README do plugin.
+   */
+  void app.register(async (app) => {
+    registrarRotasDeTempoReal(app, {
+      armazenamento,
+      agora,
+      sessoes,
+      salas: salasTempoReal,
+      filas,
+    });
   });
 
   return app;
