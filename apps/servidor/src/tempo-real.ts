@@ -13,6 +13,7 @@ import {
 } from "@chaos/dominio";
 import type { Armazenamento } from "./armazenamento.ts";
 import { premioDe } from "./batalhas.ts";
+import { chaveDoPersonagem, Filas } from "./filas.ts";
 import { Sessoes } from "./sessoes.ts";
 
 /**
@@ -69,9 +70,10 @@ export function registrarRotasDeTempoReal(
     agora: () => number;
     sessoes: Sessoes;
     salas: SalasTempoReal;
+    filas: Filas;
   },
 ): void {
-  const { armazenamento, agora, sessoes, salas } = deps;
+  const { armazenamento, agora, sessoes, salas, filas } = deps;
 
   app.get("/combate-tempo-real/:id", { websocket: true }, async (socket, req) => {
     const token = tokenDoSubprotocolo(req.headers["sec-websocket-protocol"]);
@@ -110,32 +112,60 @@ export function registrarRotasDeTempoReal(
       encerrada = true;
       clearInterval(tick);
 
-      const atual = await armazenamento.personagens.buscar(personagemId);
-      if (!atual) return;
+      /*
+       * Sob a mesma trava que toda outra escrita de personagem — a
+       * conclusão da batalha por turnos incluída, o análogo direto disto.
+       * Sem ela, a sala terminando ao mesmo tempo que uma rota HTTP
+       * (comprar item, evoluir árvore) lê o mesmo personagem, os dois
+       * decidem em cima do estado velho, e o segundo grava por cima do
+       * primeiro — o mesmo "lost update" que `Filas` já existe para evitar
+       * (ver o comentário em `filas.ts`).
+       */
+      await filas.executar(chaveDoPersonagem(personagemId), async () => {
+        const atual = await armazenamento.personagens.buscar(personagemId);
+        if (!atual) return;
 
-      if (sala.fase === "derrota") {
-        await armazenamento.personagens.salvar(perderBatalha(atual));
-      } else if (sala.fase === "vitoria") {
-        const premio = premioDe(atual.nivel, atual.dificuldade);
-        await armazenamento.personagens.salvar({
-          ...atual,
-          sucata: atual.sucata + premio.sucata,
-        });
-      }
+        if (sala.fase === "derrota") {
+          await armazenamento.personagens.salvar(perderBatalha(atual));
+        } else if (sala.fase === "vitoria") {
+          const premio = premioDe(atual.nivel, atual.dificuldade);
+          await armazenamento.personagens.salvar({
+            ...atual,
+            sucata: atual.sucata + premio.sucata,
+          });
+        }
+      });
+      // Fecha mesmo se o personagem sumiu no meio (`atual` nulo): o socket
+      // não pode ficar aberto para sempre só porque não houve o que gravar.
       socket.close(1000, sala.fase);
     }
 
     const tick = setInterval(() => {
       if (encerrada) return;
 
-      if (agora() - ultimaIntencaoEm > TIMEOUT_DE_DESCONEXAO_MS) {
-        sala = { ...sala, fase: "derrota" };
-      } else {
-        sala = avancarTick(sala);
-      }
+      /*
+       * Um `throw` daqui dentro — de `avancarTick`, de `JSON.stringify`,
+       * do próprio `socket.send` — é uma exceção não pega num callback de
+       * timer, e isso derruba o PROCESSO inteiro no Node, não só esta
+       * sala: toda outra sala e a API HTTP caem juntas por causa de uma
+       * combinação de estado que só esta sala pisou. Sem teste ainda
+       * cobrindo esta rota, um bug em `avancarTick` numa combinação nova
+       * é catastrófico em vez de contido. Na dúvida, encerra só esta sala
+       * como derrota — o mesmo tratamento da desconexão.
+       */
+      try {
+        if (agora() - ultimaIntencaoEm > TIMEOUT_DE_DESCONEXAO_MS) {
+          sala = { ...sala, fase: "derrota" };
+        } else {
+          sala = avancarTick(sala);
+        }
 
-      socket.send(JSON.stringify({ tipo: "estado", sala }));
-      if (sala.fase !== "em-andamento") void concluir();
+        socket.send(JSON.stringify({ tipo: "estado", sala }));
+        if (sala.fase !== "em-andamento") void concluir();
+      } catch {
+        sala = { ...sala, fase: "derrota" };
+        void concluir();
+      }
     }, 1000 / TICKS_POR_SEGUNDO);
 
     socket.on("message", (dados: Buffer) => {

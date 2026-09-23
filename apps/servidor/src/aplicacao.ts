@@ -1952,7 +1952,13 @@ export function criarAplicacao(opcoes: Opcoes): FastifyInstance {
     };
   }
 
-  registrarRotasDeTempoReal(app, { armazenamento, agora, sessoes, salas: salasTempoReal });
+  registrarRotasDeTempoReal(app, {
+    armazenamento,
+    agora,
+    sessoes,
+    salas: salasTempoReal,
+    filas,
+  });
 
   return app;
 }
