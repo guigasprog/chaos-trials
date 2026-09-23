@@ -251,6 +251,10 @@ export default function Jogo() {
         ) : painel === "tempo-real" ? (
           <CombateTempoReal
             personagemId={p.id}
+            // Sair da sala no meio conta como derrota no servidor — na
+            // última vida isso é o personagem, então a tela precisa saber
+            // pedir confirmação, igual ao "Lutar" da ficha.
+            naUltimaVida={p.vidasRestantes <= 1 && p.vidasGuardadas === 0}
             aoFechar={() => {
               setPainel("ficha");
               // Mesmo refresh de depois de uma luta comum: a sala mexe em

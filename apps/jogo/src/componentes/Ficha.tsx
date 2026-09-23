@@ -38,6 +38,10 @@ export function Ficha({
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  /* Estado próprio, separado do `confirmando` do botão "Lutar": são dois
+     fluxos independentes, e um booleano só faria um botão piscar
+     "clique de novo" porque o OUTRO foi clicado. */
+  const [confirmandoTempoReal, setConfirmandoTempoReal] = useState(false);
   const paleta = PALETAS[p.classe.ramo];
 
   async function tentar(acao: () => Promise<Personagem>) {
@@ -56,6 +60,10 @@ export function Ficha({
   // Abaixo de um terço a vida vira aviso: é a diferença entre lutar sabendo
   // do risco e lutar sem perceber que está machucado.
   const ferido = p.vida / p.vidaMaxima < 0.35;
+  // Sem reserva nenhuma: perder qualquer luta daqui — por turnos ou em
+  // tempo real — é o fim do personagem. Compartilhado pelos dois verbos de
+  // luta, que arriscam exatamente a mesma vida.
+  const naUltimaVida = p.vidasRestantes <= 1 && p.vidasGuardadas === 0;
 
   return (
     <section className="flex flex-col gap-10">
@@ -261,7 +269,8 @@ export function Ficha({
             um chefe</strong>, tudo na mesma luta — a vida não se recupera entre
             ondas. Perder aqui{" "}
             <strong className="text-tinta">custa uma vida como qualquer luta</strong>,
-            mas o prêmio por vencer o chefe também é maior.
+            e o prêmio de sucata é o mesmo de uma luta comum, na sua
+            dificuldade — a diferença aqui é o ritmo, não o prêmio.
           </p>
 
           <div className="flex flex-wrap gap-4">
@@ -287,48 +296,68 @@ export function Ficha({
                 escolha por luta. Na última vida, sem reserva, dois
                 cliques — é a luta em que se morre de verdade, e um
                 clique acidental não pode custar o personagem. */}
-            {(() => {
-              const naUltimaVida = p.vidasRestantes <= 1 && p.vidasGuardadas === 0;
-              return (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!naUltimaVida) {
-                      aoLutar();
-                      return;
-                    }
-                    if (confirmando) {
-                      setConfirmando(false);
-                      aoLutar();
-                    } else {
-                      setConfirmando(true);
-                      setTimeout(() => setConfirmando(false), 4000);
-                    }
-                  }}
-                  disabled={ocupado}
-                  className={`botao botao-grande ${naUltimaVida ? "botao-perigo" : ""}`}
-                  title={
-                    naUltimaVida
-                      ? "sem vida de reserva — perder aqui é permanente"
-                      : `${p.vidasRestantes} vida${p.vidasRestantes === 1 ? "" : "s"} de reserva`
-                  }
-                >
-                  {naUltimaVida && confirmando
-                    ? "Clique de novo — perder é permanente"
-                    : naUltimaVida
-                      ? "Lutar — última vida"
-                      : `Lutar (${p.vidasRestantes} vida${p.vidasRestantes === 1 ? "" : "s"})`}
-                </button>
-              );
-            })()}
-
             <button
               type="button"
-              onClick={aoAbrirTempoReal}
+              onClick={() => {
+                if (!naUltimaVida) {
+                  aoLutar();
+                  return;
+                }
+                if (confirmando) {
+                  setConfirmando(false);
+                  aoLutar();
+                } else {
+                  setConfirmando(true);
+                  setTimeout(() => setConfirmando(false), 4000);
+                }
+              }}
               disabled={ocupado}
-              className="botao botao-grande"
+              className={`botao botao-grande ${naUltimaVida ? "botao-perigo" : ""}`}
+              title={
+                naUltimaVida
+                  ? "sem vida de reserva — perder aqui é permanente"
+                  : `${p.vidasRestantes} vida${p.vidasRestantes === 1 ? "" : "s"} de reserva`
+              }
             >
-              Desafio em tempo real
+              {naUltimaVida && confirmando
+                ? "Clique de novo — perder é permanente"
+                : naUltimaVida
+                  ? "Lutar — última vida"
+                  : `Lutar (${p.vidasRestantes} vida${p.vidasRestantes === 1 ? "" : "s"})`}
+            </button>
+
+            {/* O mesmo cuidado do "Lutar": a sala em tempo real arrisca a
+                mesma vida, pelo mesmo `perderBatalha`. Um botão que custa
+                o personagem num clique não pode ser mais fácil de apertar
+                por acaso só porque é o verbo novo. */}
+            <button
+              type="button"
+              onClick={() => {
+                if (!naUltimaVida) {
+                  aoAbrirTempoReal();
+                  return;
+                }
+                if (confirmandoTempoReal) {
+                  setConfirmandoTempoReal(false);
+                  aoAbrirTempoReal();
+                } else {
+                  setConfirmandoTempoReal(true);
+                  setTimeout(() => setConfirmandoTempoReal(false), 4000);
+                }
+              }}
+              disabled={ocupado}
+              className={`botao botao-grande ${naUltimaVida ? "botao-perigo" : ""}`}
+              title={
+                naUltimaVida
+                  ? "sem vida de reserva — perder a sala é permanente"
+                  : `${p.vidasRestantes} vida${p.vidasRestantes === 1 ? "" : "s"} de reserva`
+              }
+            >
+              {naUltimaVida && confirmandoTempoReal
+                ? "Clique de novo — perder é permanente"
+                : naUltimaVida
+                  ? "Desafio em tempo real — última vida"
+                  : "Desafio em tempo real"}
             </button>
           </div>
         </>

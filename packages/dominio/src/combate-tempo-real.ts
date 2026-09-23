@@ -164,10 +164,18 @@ export function iniciarEsquiva(sala: Sala): Sala {
   };
 }
 
+/**
+ * O golpe básico do jogador. A regra da spec (seção 4) é simétrica e vale
+ * igual para os dois lados: mesma raia, OS DOIS em `perto`, e o alvo fora
+ * de uma janela de esquiva. Olhar só a distância de quem bate deixaria
+ * acertar um inimigo ainda `longe` — aproximar-se deixaria de ser o preço
+ * de atacar, que é justamente o que faz recuar valer alguma coisa.
+ */
 export function atacar(sala: Sala): Sala {
   const acertou =
     sala.jogador.raia === sala.inimigo.raia &&
     sala.jogador.distancia === "perto" &&
+    sala.inimigo.distancia === "perto" &&
     sala.inimigo.esquivandoPor === 0;
 
   if (!acertou) return sala;
@@ -227,12 +235,19 @@ export function decidirAcaoDoInimigo(sala: Sala): Sala {
   };
 }
 
-/** Chamada quando o telégrafo chega a zero — resolve o golpe e limpa o
-    telégrafo, independente de ter acertado. */
+/**
+ * Chamada quando o telégrafo chega a zero — resolve o golpe e limpa o
+ * telégrafo, independente de ter acertado.
+ *
+ * Mesma regra de `atacar`, espelhada: comparar as duas distâncias por
+ * igualdade deixava "longe contra longe" valer como alcance, e aí recuar
+ * nunca protegia de nada — só mudava o número em que os dois empatavam.
+ */
 export function resolverAtaqueDoInimigo(sala: Sala): Sala {
   const acertou =
     sala.jogador.raia === sala.inimigo.raia &&
-    sala.jogador.distancia === sala.inimigo.distancia &&
+    sala.jogador.distancia === "perto" &&
+    sala.inimigo.distancia === "perto" &&
     sala.jogador.esquivandoPor === 0;
 
   return {

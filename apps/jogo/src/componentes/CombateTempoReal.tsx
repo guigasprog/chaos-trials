@@ -18,13 +18,21 @@ interface EstadoDaSala {
 
 export function CombateTempoReal({
   personagemId,
+  naUltimaVida,
   aoFechar,
 }: {
   personagemId: string;
+  /** Sem vida de reserva: sair no meio da sala é o fim do personagem. */
+  naUltimaVida: boolean;
   aoFechar: () => void;
 }) {
   const [sala, setSala] = useState<EstadoDaSala | null>(null);
   const [terminou, setTerminou] = useState<"vitoria" | "derrota" | null>(null);
+  /* Sair da sala em andamento fecha o socket, e o servidor grada isso como
+     derrota. Na última vida, o mesmo dois-cliques da ficha — a diferença é
+     que aqui o botão fica ao lado dos verbos de combate, onde a mão já
+     está apertando coisas depressa. */
+  const [confirmandoSaida, setConfirmandoSaida] = useState(false);
   const conexao = useRef<ReturnType<typeof conectarSalaTempoReal> | null>(null);
 
   useEffect(() => {
@@ -62,7 +70,14 @@ export function CombateTempoReal({
   }
 
   if (!sala) {
-    return <p className="rotulo">entrando na sala…</p>;
+    return (
+      <section className="surge flex flex-col gap-4 p-6">
+        <p className="rotulo">entrando na sala…</p>
+        <button type="button" onClick={aoFechar} className="botao self-start">
+          Voltar
+        </button>
+      </section>
+    );
   }
 
   return (
@@ -71,8 +86,29 @@ export function CombateTempoReal({
         <p className="rotulo">
           Onda {sala.onda} {sala.inimigo.tipo === "chefe" ? "— chefe" : ""}
         </p>
-        <button type="button" onClick={aoFechar} className="botao">
-          Sair
+        <button
+          type="button"
+          onClick={() => {
+            if (!naUltimaVida) {
+              aoFechar();
+              return;
+            }
+            if (confirmandoSaida) {
+              setConfirmandoSaida(false);
+              aoFechar();
+            } else {
+              setConfirmandoSaida(true);
+              setTimeout(() => setConfirmandoSaida(false), 4000);
+            }
+          }}
+          className={`botao ${naUltimaVida ? "botao-perigo" : ""}`}
+          title={
+            naUltimaVida
+              ? "sem vida de reserva — sair agora é permanente"
+              : undefined
+          }
+        >
+          {naUltimaVida && confirmandoSaida ? "Clique de novo — perder é permanente" : "Sair"}
         </button>
       </header>
 

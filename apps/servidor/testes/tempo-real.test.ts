@@ -122,6 +122,11 @@ describe("combate em tempo real — WebSocket", () => {
       [`bearer.${token}`],
     );
     await new Promise<void>((resolve) => ws.once("message", () => resolve())); // primeiro estado
+    // Fechar sem nunca ter jogado não conta como derrota (ver
+    // `tempo-real.ts`, handler de "close") — este teste quer o caso em que
+    // o jogador já mandou uma intenção e some, então manda uma antes.
+    ws.send(JSON.stringify({ tipo: "mover-raia", direcao: 1 }));
+    await new Promise<void>((resolve) => ws.once("message", () => resolve())); // estado após a intenção
     ws.close();
     await new Promise<void>((resolve) => ws.on("close", () => resolve()));
     // dá um instante para o handler assíncrono de conclusão (filas.executar

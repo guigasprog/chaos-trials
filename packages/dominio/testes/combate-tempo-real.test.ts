@@ -55,23 +55,22 @@ describe("iniciarSala", () => {
     assert.deepEqual(a, b);
   });
 
-  it("sementes diferentes podem dar inimigos com vida diferente", () => {
-    // Não é garantido matematicamente, mas com a variação esperada do
-    // dado, entre várias sementes ao menos uma diverge.
-    const vidas = new Set(
-      Array.from({ length: 10 }, (_, i) =>
-        iniciarSala({
-          classeDoJogador: 4,
-          nivelDoJogador: 30,
-          vidaDoJogador: 500,
-          vidaMaximaDoJogador: 500,
-          semente: SEMENTE + i,
-        }).inimigo.vida,
-      ),
+  it("a semente NÃO mexe nos números do inimigo — mesma classe/nível dá o mesmo inimigo", () => {
+    // `inimigoDaOnda` nem lê a semente que recebe: vida e dano saem só de
+    // classe, nível e tipo da onda. Documenta o que é verdade hoje, em vez
+    // de afirmar uma variação que não existe — se um dia o inimigo passar
+    // a variar por semente, é este teste que precisa cair junto.
+    const inimigos = Array.from({ length: 10 }, (_, i) =>
+      iniciarSala({
+        classeDoJogador: 4,
+        nivelDoJogador: 30,
+        vidaDoJogador: 500,
+        vidaMaximaDoJogador: 500,
+        semente: SEMENTE + i,
+      }).inimigo,
     );
-    assert.ok(vidas.size >= 1); // ao menos não quebra; a vida do inimigo
-    // comum nesta fase é determinística pelo nível, então size pode ser 1
-    // — o teste real de variação fica nos testes de dano, mais abaixo.
+    assert.equal(new Set(inimigos.map((i) => i.vida)).size, 1);
+    assert.equal(new Set(inimigos.map((i) => i.dano)).size, 1);
   });
 });
 
@@ -140,9 +139,9 @@ describe("iniciarEsquiva", () => {
 
 function salaComInimigoNaMesmaPosicao(): ReturnType<typeof novaSala> {
   const sala = novaSala();
-  // Nota: repositiona o jogador (não só o inimigo) porque atacar exige
-  // jogador.distancia === "perto" — sem isto, o miss seria garantido pela
-  // distância, não testando a condição de raia isoladamente.
+  // Nota: repositiona os DOIS (não só o inimigo) porque a regra de acerto
+  // exige jogador E inimigo em "perto" — sem isto, o miss seria garantido
+  // pela distância, não testando a condição que cada teste diz testar.
   return {
     ...sala,
     jogador: { ...sala.jogador, raia: "centro", distancia: "perto" },
@@ -170,11 +169,35 @@ describe("atacar", () => {
     assert.equal(depois.inimigo.vida, raiasDiferentes.inimigo.vida);
   });
 
-  it("erra se a distância não é perto", () => {
+  it("erra se o JOGADOR não está em perto — isolação: inimigo em perto, mesma raia", () => {
+    const sala = salaComInimigoNaMesmaPosicao();
+    const jogadorAfastado = {
+      ...sala,
+      jogador: { ...sala.jogador, distancia: "medio" as const },
+    };
+    const depois = atacar(jogadorAfastado);
+    assert.equal(depois.inimigo.vida, jogadorAfastado.inimigo.vida);
+  });
+
+  it("erra se o INIMIGO não está em perto — isolação: jogador em perto, mesma raia", () => {
+    // O caso que a regra antiga deixava passar: o jogador "em alcance"
+    // sozinho acertava um inimigo ainda longe, sem nunca ter fechado a
+    // distância de verdade.
+    const sala = salaComInimigoNaMesmaPosicao();
+    const inimigoLonge = {
+      ...sala,
+      inimigo: { ...sala.inimigo, distancia: "longe" as const },
+    };
+    const depois = atacar(inimigoLonge);
+    assert.equal(depois.inimigo.vida, inimigoLonge.inimigo.vida);
+  });
+
+  it("erra com os dois longe, mesmo empatados na distância", () => {
+    // Empate de distância não é alcance: "longe" contra "longe" é o par
+    // com que a sala começa, e dali ninguém acerta ninguém.
     const sala = novaSala();
-    const longe = { ...sala, inimigo: { ...sala.inimigo, raia: "centro" as const, distancia: "longe" as const } };
-    const depois = atacar(longe);
-    assert.equal(depois.inimigo.vida, longe.inimigo.vida);
+    const depois = atacar(sala);
+    assert.equal(depois.inimigo.vida, sala.inimigo.vida);
   });
 
   it("erra se o inimigo está esquivando — isolação: mesma raia, distância perto, mas esquiva ativa", () => {
@@ -274,15 +297,33 @@ describe("resolverAtaqueDoInimigo", () => {
     assert.equal(depois.jogador.vida, esquivando.jogador.vida);
   });
 
-  it("não acerta se raia ou distância diferem", () => {
-    const sala = novaSala(); // inimigo em "centro"/"longe" por padrão, jogador igual — força diferença
+  it("não acerta se as raias diferem — isolação: os dois em perto", () => {
+    const sala = salaComInimigoNaMesmaPosicao();
+    const raiasDiferentes = {
+      ...sala,
+      inimigo: { ...sala.inimigo, raia: "direita" as const },
+    };
+    const depois = resolverAtaqueDoInimigo(raiasDiferentes);
+    assert.equal(depois.jogador.vida, raiasDiferentes.jogador.vida);
+  });
+
+  it("não acerta se as distâncias diferem — isolação: mesma raia, inimigo em perto", () => {
+    const sala = salaComInimigoNaMesmaPosicao();
     const separados = {
       ...sala,
-      jogador: { ...sala.jogador, distancia: "perto" as const },
-      inimigo: { ...sala.inimigo, distancia: "longe" as const },
+      jogador: { ...sala.jogador, distancia: "longe" as const },
     };
     const depois = resolverAtaqueDoInimigo(separados);
     assert.equal(depois.jogador.vida, separados.jogador.vida);
+  });
+
+  it("não acerta com os dois longe, mesmo empatados na distância", () => {
+    // O caso que a regra antiga (igualdade entre as duas distâncias)
+    // deixava passar: recuar não protegia de nada, porque o inimigo
+    // recuava junto e o empate contava como alcance.
+    const sala = novaSala(); // jogador e inimigo começam os dois em "longe"
+    const depois = resolverAtaqueDoInimigo(sala);
+    assert.equal(depois.jogador.vida, sala.jogador.vida);
   });
 });
 
@@ -383,6 +424,34 @@ describe("avancarTick", () => {
     assert.deepEqual(avancarTick(venceu), venceu);
     const perdeu = { ...novaSala(), fase: "derrota" as const };
     assert.deepEqual(avancarTick(perdeu), perdeu);
+  });
+
+  it("a progressão real das ondas chega ao chefe na onda 4, mais duro que o comum", () => {
+    // O único teste que atravessa as ondas de verdade, via `avancarTick`,
+    // em vez de montar `{ onda: 4, tipo: "chefe" }` na mão — é o que
+    // prende `ONDAS_COMUNS_ANTES_DO_CHEFE` no lugar. Com a fronteira
+    // montada à mão, trocar `>` por `>=` (chefe já na onda 3) não quebrava
+    // nenhum teste da suíte.
+    let sala = novaSala();
+    const comumDaOnda1 = sala.inimigo;
+    assert.equal(comumDaOnda1.tipo, "comum");
+
+    // Zera o inimigo da onda e deixa o tick spawnar o da próxima.
+    for (const ondaEsperada of [2, 3, 4]) {
+      sala = avancarTick({ ...sala, inimigo: { ...sala.inimigo, vida: 0 } });
+      assert.equal(sala.onda, ondaEsperada);
+      assert.equal(sala.fase, "em-andamento");
+      assert.equal(
+        sala.inimigo.tipo,
+        ondaEsperada === 4 ? "chefe" : "comum",
+        `onda ${ondaEsperada} devia ter inimigo ${ondaEsperada === 4 ? "chefe" : "comum"}`,
+      );
+    }
+
+    const chefe = sala.inimigo;
+    assert.ok(chefe.vida > comumDaOnda1.vida, "o chefe devia ter mais vida que o comum");
+    assert.equal(chefe.vidaMaxima, chefe.vida, "o chefe spawna com a vida cheia");
+    assert.ok(chefe.dano > comumDaOnda1.dano, "o chefe devia bater mais forte que o comum");
   });
 
   it("sem telégrafo e fora de alcance, o inimigo persegue no tick", () => {
