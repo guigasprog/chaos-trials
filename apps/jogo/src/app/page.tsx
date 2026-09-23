@@ -19,6 +19,7 @@ import {
 import { Arena } from "@/componentes/Arena";
 import { Arvore } from "@/componentes/Arvore";
 import { Combate } from "@/componentes/Combate";
+import { CombateTempoReal } from "@/componentes/CombateTempoReal";
 import { Criacao } from "@/componentes/Criacao";
 import { Entrada } from "@/componentes/Entrada";
 import { Ficha } from "@/componentes/Ficha";
@@ -50,7 +51,7 @@ export default function Jogo() {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   /** Qual painel está por cima da ficha. */
   const [painel, setPainel] = useState<
-    "ficha" | "arvore" | "itens" | "mercado" | "arena"
+    "ficha" | "arvore" | "itens" | "mercado" | "arena" | "tempo-real"
   >("ficha");
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -247,6 +248,23 @@ export default function Jogo() {
           />
         ) : painel === "arena" ? (
           <Arena p={p} aoAtualizar={setP} aoFechar={() => setPainel("ficha")} />
+        ) : painel === "tempo-real" ? (
+          <CombateTempoReal
+            personagemId={p.id}
+            aoFechar={() => {
+              setPainel("ficha");
+              // Mesmo refresh de depois de uma luta comum: a sala mexe em
+              // vida/vidas/sucata do personagem, que só o servidor sabe ao certo.
+              void (async () => {
+                try {
+                  setP(await api.buscar(p.id));
+                } catch {
+                  /* a ficha segue com o que tem; a próxima carga corrige */
+                }
+                void recarregar();
+              })();
+            }}
+          />
         ) : batalha && !resultado ? (
           <Combate
             batalha={batalha}
@@ -349,6 +367,7 @@ export default function Jogo() {
               aoAtualizar={setP}
               aoAtualizarConta={() => void recarregar()}
               aoLutar={lutar}
+              aoAbrirTempoReal={() => setPainel("tempo-real")}
               aoVoltarAPrateleira={() => {
                 esquecerId();
                 setP(null);

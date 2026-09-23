@@ -19,6 +19,7 @@ export function Ficha({
   aoAtualizar,
   aoAtualizarConta,
   aoLutar,
+  aoAbrirTempoReal,
   aoVoltarAPrateleira,
   ocupado,
 }: {
@@ -28,6 +29,7 @@ export function Ficha({
   /** O revive cobra da conta; a barra do herói precisa saber. */
   aoAtualizarConta: () => void;
   aoLutar: () => void;
+  aoAbrirTempoReal: () => void;
   /** A saída do túmulo pra quem não vai (ou não pode) reviver agora — sem
       isso a única saída era descobrir sozinho que o retrato no HUD troca
       de personagem. */
@@ -254,6 +256,14 @@ export function Ficha({
             </div>
           )}
 
+          <p className="text-[0.82rem] leading-relaxed text-tinta-fraca">
+            O desafio em tempo real é <strong className="text-tinta">três ondas e
+            um chefe</strong>, tudo na mesma luta — a vida não se recupera entre
+            ondas. Perder aqui{" "}
+            <strong className="text-tinta">custa uma vida como qualquer luta</strong>,
+            mas o prêmio por vencer o chefe também é maior.
+          </p>
+
           <div className="flex flex-wrap gap-4">
             {/*
               * A poção fica JUNTO dos verbos de luta, e não numa tela de
@@ -311,6 +321,15 @@ export function Ficha({
                 </button>
               );
             })()}
+
+            <button
+              type="button"
+              onClick={aoAbrirTempoReal}
+              disabled={ocupado}
+              className="botao botao-grande"
+            >
+              Desafio em tempo real
+            </button>
           </div>
         </>
       )}
