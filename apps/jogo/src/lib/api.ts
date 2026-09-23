@@ -8,7 +8,7 @@
  * estado —, porque é isso que torna a trapaça impossível.
  */
 
-const BASE = process.env.NEXT_PUBLIC_API ?? "http://localhost:3333";
+export const BASE = process.env.NEXT_PUBLIC_API ?? "http://localhost:3333";
 
 /** Onde o id do personagem fica entre visitas. */
 const CHAVE = "chaos-trials:personagem";
